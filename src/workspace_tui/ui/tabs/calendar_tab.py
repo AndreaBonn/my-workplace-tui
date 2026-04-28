@@ -35,12 +35,15 @@ def _day_label(dt) -> str:
     return header
 
 
+def _escape_markup(text: str) -> str:
+    """Escape all square brackets for Textual Content markup parser."""
+    return text.replace("[", r"\[")
+
+
 def _render_event_label(ev: CalendarEvent) -> str:
     """Build Rich markup label for a single event."""
-    from rich.markup import escape
-
     dt = parse_date(ev.start)
-    title = escape(ev.summary)
+    title = _escape_markup(ev.summary)
 
     if ev.all_day:
         return f"[bold yellow]▪ TUTTO IL GIORNO[/]  [bold]{title}[/]"
@@ -49,7 +52,7 @@ def _render_event_label(ev: CalendarEvent) -> str:
 
     badges = ""
     if ev.location:
-        badges += f"  [dim]📍 {escape(ev.location)}[/]"
+        badges += f"  [dim]📍 {_escape_markup(ev.location)}[/]"
     if ev.meet_link:
         badges += "  [green]🔗 Meet[/]"
 
