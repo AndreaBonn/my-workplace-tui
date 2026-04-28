@@ -113,8 +113,17 @@ class GmailService(BaseService):
         max_results: int = 50,
         query: str = "",
         page_token: str | None = None,
+        *,
+        skip_cache: bool = False,
     ) -> tuple[list[EmailMessage], str | None]:
-        """List messages for a label, returns (messages, next_page_token)."""
+        """List messages for a label, returns (messages, next_page_token).
+
+        Parameters
+        ----------
+        skip_cache : bool
+            Bypass cache and always fetch fresh data from the API.
+            Used by the poll manager to reliably detect new messages.
+        """
         cache_key = f"{CACHE_PREFIX}list:{label_id}:{query}:{page_token}"
 
         def fetch():
@@ -139,6 +148,8 @@ class GmailService(BaseService):
             next_token = results.get("nextPageToken")
             return messages, next_token
 
+        if skip_cache:
+            self._cache.invalidate(cache_key)
         return self._cached(cache_key, ttl=TTL_MESSAGE_LIST, fetch=fetch)
 
     def get_message(self, message_id: str) -> EmailMessage | None:

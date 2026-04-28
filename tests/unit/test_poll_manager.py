@@ -54,12 +54,17 @@ class TestPollState:
 
 
 class TestPollResult:
-    def test_defaults_zero(self):
+    def test_defaults_none_for_counts(self):
         result = PollResult()
-        assert result.gmail_unread == 0
-        assert result.jira_assigned == 0
-        assert result.calendar_upcoming == 0
+        assert result.gmail_unread is None
+        assert result.jira_assigned is None
+        assert result.calendar_upcoming is None
         assert result.timestamp == ""
+
+    def test_partial_update_preserves_none(self):
+        result = PollResult(gmail_unread=5)
+        assert result.gmail_unread == 5
+        assert result.jira_assigned is None
 
 
 class TestPollManagerLifecycle:

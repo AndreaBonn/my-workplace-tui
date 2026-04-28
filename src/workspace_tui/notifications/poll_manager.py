@@ -34,11 +34,15 @@ class PollState:
 
 @dataclass
 class PollResult:
-    """Result of a poll cycle, consumed by the app to update UI."""
+    """Result of a poll cycle, consumed by the app to update UI.
 
-    gmail_unread: int = 0
-    jira_assigned: int = 0
-    calendar_upcoming: int = 0
+    Fields default to ``None`` to distinguish "not reported by this poll"
+    from an actual count of zero.
+    """
+
+    gmail_unread: int | None = None
+    jira_assigned: int | None = None
+    calendar_upcoming: int | None = None
     timestamp: str = ""
 
 
@@ -147,7 +151,7 @@ class PollManager:
     def _poll_gmail(self) -> None:
         try:
             messages, _ = self._gmail_service.list_messages(
-                label_id="INBOX", query="is:unread", max_results=20
+                label_id="INBOX", query="is:unread", max_results=20, skip_cache=True
             )
         except ServiceError as exc:
             logger.warning("Gmail poll failed: {}", exc.message)

@@ -146,9 +146,9 @@ class WorkspaceTUI(App):
     def _handle_poll_update(self, result: PollResult) -> None:
         def update_ui() -> None:
             status_bar = self.query_one(StatusBar)
-            if result.gmail_unread:
+            if result.gmail_unread is not None:
                 status_bar.unread_count = result.gmail_unread
-            if result.jira_assigned:
+            if result.jira_assigned is not None:
                 status_bar.jira_count = result.jira_assigned
             if result.timestamp:
                 status_bar.last_update = result.timestamp
