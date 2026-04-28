@@ -160,6 +160,11 @@ StatusBar {
 
 #drive-detail {
     width: 55%;
+    padding: 1 2;
+}
+
+#drive-file-detail {
+    padding: 1 0;
 }
 
 #chat-layout {

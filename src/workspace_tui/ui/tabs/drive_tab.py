@@ -7,7 +7,8 @@ from textual.reactive import reactive
 from textual.widgets import ListItem, ListView, Static
 
 from workspace_tui.services.drive import DriveFile, DriveService
-from workspace_tui.utils.text_utils import format_size
+from workspace_tui.utils.date_utils import format_relative, parse_date
+from workspace_tui.utils.text_utils import format_size, mime_to_label
 
 
 class FileItem(ListItem):
@@ -16,8 +17,12 @@ class FileItem(ListItem):
         self.file = file
 
     def compose(self) -> ComposeResult:
-        size_str = f"  {format_size(self.file.size)}" if self.file.size else ""
-        yield Static(f"{self.file.icon} {self.file.name}{size_str}")
+        if self.file.is_folder:
+            label = f"[bold]{self.file.icon}  {self.file.name}[/bold]"
+        else:
+            size_str = format_size(self.file.size) if self.file.size else ""
+            label = f"{self.file.icon}  {self.file.name}  [dim]{size_str}[/dim]"
+        yield Static(label, markup=True)
 
 
 class DriveTab(Vertical):
@@ -42,7 +47,11 @@ class DriveTab(Vertical):
                 yield Static("Il mio Drive", id="drive-breadcrumb", classes="panel-title")
                 yield ListView(id="drive-file-list")
             with Vertical(id="drive-detail"):
-                yield Static("Seleziona un file", id="drive-file-detail", markup=False)
+                yield Static(
+                    "[dim]Seleziona un file per vederne i dettagli[/dim]",
+                    id="drive-file-detail",
+                    markup=True,
+                )
 
     def set_service(self, service: DriveService) -> None:
         self.drive_service = service
@@ -83,18 +92,36 @@ class DriveTab(Vertical):
             self._load_files(file.file_id)
             self.query_one("#drive-breadcrumb", Static).update(file.name)
 
+    def _format_modified_time(self, raw_time: str) -> str:
+        dt = parse_date(raw_time)
+        if dt:
+            return format_relative(dt)
+        return raw_time if raw_time else "-"
+
     def _update_detail(self, file: DriveFile) -> None:
         detail = self.query_one("#drive-file-detail", Static)
         size_str = format_size(file.size) if file.size else "-"
-        detail.update(
-            f"Nome:    {file.name}\n"
-            f"Tipo:    {file.mime_type}\n"
-            f"Dim.:    {size_str}\n"
-            f"Modif.:  {file.modified_time}\n"
-            f"Prop.:   {file.owner}\n\n"
-            f"[o] Apri  [d] Download  [b] Indietro\n"
-            f"[R] Recenti  [S] Condivisi  [M] Root"
-        )
+        type_label = mime_to_label(file.mime_type)
+        modified = self._format_modified_time(file.modified_time)
+
+        lines = [
+            f"[bold]{file.icon}  {file.name}[/bold]",
+            "",
+            f"  [dim]Tipo[/dim]     {type_label}",
+            f"  [dim]Dim.[/dim]     {size_str}",
+            f"  [dim]Modifica[/dim] {modified}",
+            f"  [dim]Propri.[/dim]  {file.owner}",
+            "",
+            "─" * 36,
+            "",
+            "  [bold reverse] o [/] Apri    [bold reverse] d [/] Download",
+            "  [bold reverse] b [/] Indietro",
+            "",
+            "  [bold reverse] R [/] Recenti "
+            "[bold reverse] S [/] Condivisi "
+            "[bold reverse] M [/] Root",
+        ]
+        detail.update("\n".join(lines))
 
     def action_open_selected(self) -> None:
         if self.selected_file and self.selected_file.is_folder:

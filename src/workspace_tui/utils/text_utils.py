@@ -41,6 +41,40 @@ def format_size(size_bytes: int) -> str:
     return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
 
 
+_MIME_LABELS = {
+    "application/vnd.google-apps.folder": "Cartella Google",
+    "application/vnd.google-apps.document": "Documento Google",
+    "application/vnd.google-apps.spreadsheet": "Foglio Google",
+    "application/vnd.google-apps.presentation": "Presentazione Google",
+    "application/pdf": "PDF",
+    "image/png": "Immagine PNG",
+    "image/jpeg": "Immagine JPEG",
+    "image/gif": "Immagine GIF",
+    "text/plain": "Testo",
+    "text/csv": "CSV",
+    "application/zip": "Archivio ZIP",
+    "application/json": "JSON",
+    "video/mp4": "Video MP4",
+}
+
+
+def mime_to_label(mime_type: str) -> str:
+    if mime_type in _MIME_LABELS:
+        return _MIME_LABELS[mime_type]
+    category = mime_type.split("/")[0] if "/" in mime_type else ""
+    match category:
+        case "image":
+            return "Immagine"
+        case "video":
+            return "Video"
+        case "audio":
+            return "Audio"
+        case "text":
+            return "Documento testo"
+        case _:
+            return mime_type.split("/")[-1] if "/" in mime_type else mime_type
+
+
 def adf_to_text(adf_document: dict) -> str:
     """Convert Atlassian Document Format (ADF) JSON to plain text."""
     if not adf_document:
