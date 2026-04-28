@@ -101,15 +101,29 @@ class JiraService(BaseService):
         cache_key = f"{CACHE_PREFIX}search:{jql}:{start_at}:{max_results}"
 
         def fetch():
-            params = {
+            body = {
                 "jql": jql,
                 "maxResults": max_results,
                 "startAt": start_at,
-                "fields": "summary,status,issuetype,priority,assignee,reporter,"
-                "sprint,description,created,updated,timeestimate,"
-                "timespent,labels,subtasks,issuelinks",
+                "fields": [
+                    "summary",
+                    "status",
+                    "issuetype",
+                    "priority",
+                    "assignee",
+                    "reporter",
+                    "sprint",
+                    "description",
+                    "created",
+                    "updated",
+                    "timeestimate",
+                    "timespent",
+                    "labels",
+                    "subtasks",
+                    "issuelinks",
+                ],
             }
-            data = self._request("GET", "/search", params=params)
+            data = self._request("POST", "/search/jql", json=body)
             issues = [self._parse_issue(item) for item in data.get("issues", [])]
             total = data.get("total", 0)
             return issues, total

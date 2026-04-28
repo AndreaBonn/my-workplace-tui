@@ -83,9 +83,17 @@ class JiraTab(Vertical):
     def _search_worker(self, jql: str) -> None:
         if not self.jira_service:
             return
-        max_results = self._settings.jira_max_results if self._settings else 50
-        issues, _total = self.jira_service.search_issues(jql=jql, max_results=max_results)
-        self.app.call_from_thread(self._update_issue_list, issues)
+        try:
+            max_results = self._settings.jira_max_results if self._settings else 50
+            issues, _total = self.jira_service.search_issues(jql=jql, max_results=max_results)
+            self.app.call_from_thread(self._update_issue_list, issues)
+        except Exception as exc:
+            from loguru import logger
+
+            logger.error("Jira search failed: {}", exc)
+            self.app.call_from_thread(
+                self.app.notify, f"Errore Jira: {exc}", severity="error", timeout=5
+            )
 
     def _update_issue_list(self, issues: list[JiraIssue]) -> None:
         issue_list = self.query_one("#issue-list", IssueListView)
@@ -102,9 +110,14 @@ class JiraTab(Vertical):
     def _load_issue_detail_worker(self, issue_key: str) -> None:
         if not self.jira_service:
             return
-        issue = self.jira_service.get_issue(issue_key)
-        worklogs = self.jira_service.get_worklogs(issue_key)
-        self.app.call_from_thread(self._update_issue_detail, issue, worklogs)
+        try:
+            issue = self.jira_service.get_issue(issue_key)
+            worklogs = self.jira_service.get_worklogs(issue_key)
+            self.app.call_from_thread(self._update_issue_detail, issue, worklogs)
+        except Exception as exc:
+            self.app.call_from_thread(
+                self.app.notify, f"Errore caricamento issue: {exc}", severity="error", timeout=5
+            )
 
     def _update_issue_detail(self, issue: JiraIssue, worklogs: list[JiraWorklog]) -> None:
         self.selected_issue = issue
