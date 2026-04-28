@@ -37,20 +37,23 @@ def _day_label(dt) -> str:
 
 def _render_event_label(ev: CalendarEvent) -> str:
     """Build Rich markup label for a single event."""
+    from rich.markup import escape
+
     dt = parse_date(ev.start)
+    title = escape(ev.summary)
 
     if ev.all_day:
-        return f"[bold yellow]▪ TUTTO IL GIORNO[/]  [bold]{ev.summary}[/]"
+        return f"[bold yellow]▪ TUTTO IL GIORNO[/]  [bold]{title}[/]"
 
     time_str = format_time(dt) if dt else "??:??"
 
     badges = ""
     if ev.location:
-        badges += f"  [dim]📍 {ev.location}[/]"
+        badges += f"  [dim]📍 {escape(ev.location)}[/]"
     if ev.meet_link:
         badges += "  [green]🔗 Meet[/]"
 
-    line = f"[bold cyan]{time_str}[/]  [bold]{ev.summary}[/]{badges}"
+    line = f"[bold cyan]{time_str}[/]  [bold]{title}[/]{badges}"
 
     if ev.attendees:
         names = ", ".join(_attendee_name(a) for a in ev.attendees[:4])
