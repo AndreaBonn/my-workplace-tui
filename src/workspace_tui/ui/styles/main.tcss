@@ -131,8 +131,12 @@ StatusBar {
 
 #jira-filters Checkbox {
     height: 1;
+    max-height: 1;
+    min-height: 1;
     margin: 0;
     padding: 0 1;
+    border: none;
+    background: $surface;
 }
 
 .filter-label {
