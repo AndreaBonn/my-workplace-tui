@@ -1,10 +1,11 @@
+import webbrowser
 from itertools import groupby
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Vertical
 from textual.reactive import reactive
-from textual.widgets import Static
+from textual.widgets import ListItem, ListView, Static
 
 from workspace_tui.services.calendar import CalendarEvent, CalendarService
 from workspace_tui.utils.date_utils import (
@@ -33,6 +34,74 @@ def _day_label(dt) -> str:
     return header
 
 
+def _render_event_label(ev: CalendarEvent) -> str:
+    """Build Rich markup label for a single event."""
+    dt = parse_date(ev.start)
+
+    if ev.all_day:
+        title = ev.summary
+        if ev.html_link:
+            title = f"[link={ev.html_link}]{ev.summary}[/link]"
+        return f"[bold yellow]▪ TUTTO IL GIORNO[/]  [bold]{title}[/]"
+
+    time_str = format_time(dt) if dt else "??:??"
+    title = ev.summary
+    if ev.html_link:
+        title = f"[link={ev.html_link}]{ev.summary}[/link]"
+
+    badges = ""
+    if ev.location:
+        badges += f"  [dim]📍 {ev.location}[/]"
+    if ev.meet_link:
+        badges += f"  [link={ev.meet_link}][green]🔗 Meet[/green][/link]"
+
+    line = f"[bold cyan]{time_str}[/]  [bold]{title}[/]{badges}"
+
+    if ev.attendees:
+        names = ", ".join(_attendee_name(a) for a in ev.attendees[:4])
+        if len(ev.attendees) > 4:
+            names += f" +{len(ev.attendees) - 4}"
+        line += f"\n       [dim]👥 {names}[/]"
+
+    if ev.description:
+        line += "  [dim italic]📝[/]"
+
+    return line
+
+
+class EventItem(ListItem):
+    """Selectable calendar event item."""
+
+    def __init__(self, event: CalendarEvent, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.event = event
+
+    def compose(self) -> ComposeResult:
+        yield Static(_render_event_label(self.event), markup=True)
+
+
+class DayHeader(ListItem):
+    """Non-interactive day separator."""
+
+    DEFAULT_CSS = """
+    DayHeader {
+        height: 2;
+    }
+    """
+
+    def __init__(self, label: str, **kwargs) -> None:
+        super().__init__(disabled=True, **kwargs)
+        self.day_label = label
+
+    def compose(self) -> ComposeResult:
+        separator = "─" * 3
+        trail = "─" * (LINE_W - len(self.day_label) - 5)
+        yield Static(
+            f"\n[bold cyan]{separator} {self.day_label} {trail}[/]",
+            markup=True,
+        )
+
+
 class CalendarTab(Vertical):
     BINDINGS = [
         Binding("h", "prev_period", "Precedente", show=True),
@@ -41,6 +110,8 @@ class CalendarTab(Vertical):
         Binding("c", "create_event", "Crea evento", show=True),
         Binding("d", "delete_event", "Elimina", show=True),
         Binding("v", "toggle_view", "Cambia vista", show=True),
+        Binding("o", "open_link", "Apri link", show=True),
+        Binding("n", "show_notes", "Note", show=True),
     ]
 
     calendar_service: reactive[CalendarService | None] = reactive(None, init=False)
@@ -50,7 +121,7 @@ class CalendarTab(Vertical):
     def compose(self) -> ComposeResult:
         with Vertical(id="calendar-layout"):
             yield Static("[Agenda]  Settimana  Mese", id="calendar-view-selector")
-            yield VerticalScroll(Static("Caricamento eventi...", id="calendar-events"))
+            yield ListView(id="calendar-events-list")
 
     def set_service(self, service: CalendarService) -> None:
         self.calendar_service = service
@@ -72,54 +143,66 @@ class CalendarTab(Vertical):
 
     def _render_events(self, events: list[CalendarEvent]) -> None:
         self.events = events
-        events_widget = self.query_one("#calendar-events", Static)
+        event_list = self.query_one("#calendar-events-list", ListView)
+        event_list.clear()
+
         if not events:
-            events_widget.update("Nessun evento nei prossimi 30 giorni")
+            event_list.append(ListItem(Static("Nessun evento nei prossimi 30 giorni")))
             return
 
         def _event_date(ev: CalendarEvent) -> str:
             dt = parse_date(ev.start)
             return dt.strftime("%Y-%m-%d") if dt else ""
 
-        lines: list[str] = []
-        for day_key, day_events in groupby(events, key=_event_date):
+        for _day_key, day_events in groupby(events, key=_event_date):
             day_list = list(day_events)
             dt_day = parse_date(day_list[0].start)
             if not dt_day:
                 continue
 
-            # Header giorno
-            label = _day_label(dt_day)
-            lines.append(f"[bold cyan]{'─' * 3} {label} {'─' * (LINE_W - len(label) - 5)}[/]")
+            # Day header
+            event_list.append(DayHeader(label=_day_label(dt_day)))
 
-            # Prima eventi all-day
-            for ev in day_list:
-                if ev.all_day:
-                    lines.append(f"  [bold yellow]▪ TUTTO IL GIORNO[/]  [bold]{ev.summary}[/]")
+            # All-day events first, then timed
+            for ev in sorted(day_list, key=lambda e: (not e.all_day, e.start)):
+                event_list.append(EventItem(event=ev))
 
-            # Poi eventi con orario
-            for ev in day_list:
-                if ev.all_day:
-                    continue
-                dt = parse_date(ev.start)
-                time_str = format_time(dt) if dt else "??:??"
-                # Badges: location e meet
-                badges = ""
-                if ev.location:
-                    badges += f"  [dim]📍 {ev.location}[/]"
-                if ev.meet_link:
-                    badges += "  [green]🔗 Meet[/]"
-                lines.append(f"  [bold cyan]{time_str}[/]  [bold]{ev.summary}[/]{badges}")
-                # Partecipanti come nomi leggibili
-                if ev.attendees:
-                    names = ", ".join(_attendee_name(a) for a in ev.attendees[:4])
-                    if len(ev.attendees) > 4:
-                        names += f" +{len(ev.attendees) - 4}"
-                    lines.append(f"         [dim]👥 {names}[/]")
+    @property
+    def _selected_event(self) -> CalendarEvent | None:
+        event_list = self.query_one("#calendar-events-list", ListView)
+        highlighted = event_list.highlighted_child
+        if isinstance(highlighted, EventItem):
+            return highlighted.event
+        return None
 
-            lines.append("")  # Riga vuota tra giorni
+    def action_open_link(self) -> None:
+        ev = self._selected_event
+        if not ev:
+            return
+        # Priorità: Meet link > html_link (Google Calendar)
+        url = ev.meet_link or ev.html_link
+        if url:
+            webbrowser.open(url)
+            self.app.notify(f"Aperto: {ev.summary}", timeout=2)
+        else:
+            self.app.notify("Nessun link per questo evento", severity="warning")
 
-        events_widget.update("\n".join(lines))
+    def action_show_notes(self) -> None:
+        ev = self._selected_event
+        if not ev:
+            return
+        if ev.description:
+            # Truncate long descriptions for notification
+            desc = ev.description[:500]
+            if len(ev.description) > 500:
+                desc += "…"
+            self.app.notify(
+                f"[bold]{ev.summary}[/]\n\n{desc}",
+                title="📝 Note evento",
+                timeout=10,
+            )
+        else:
+            self.app.notify("Nessuna nota per questo evento", severity="warning")
 
     def action_prev_period(self) -> None:
         self.app.notify("Periodo precedente", timeout=2)

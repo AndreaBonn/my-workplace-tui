@@ -24,6 +24,7 @@ class CalendarEvent:
     meet_link: str = ""
     calendar_id: str = ""
     all_day: bool = False
+    html_link: str = ""
 
 
 @dataclass
@@ -176,4 +177,5 @@ class CalendarService(BaseService):
             meet_link=data.get("hangoutLink", ""),
             calendar_id=data.get("organizer", {}).get("email", ""),
             all_day=all_day,
+            html_link=data.get("htmlLink", ""),
         )

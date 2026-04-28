@@ -149,6 +149,22 @@ StatusBar {
     height: 1fr;
 }
 
+#calendar-events-list {
+    height: 1fr;
+}
+
+#calendar-events-list > EventItem {
+    height: auto;
+}
+
+#calendar-events-list > EventItem:hover {
+    background: $primary 15%;
+}
+
+#calendar-events-list > DayHeader {
+    background: transparent;
+}
+
 #drive-layout {
     height: 1fr;
 }
