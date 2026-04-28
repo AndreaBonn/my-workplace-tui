@@ -122,6 +122,7 @@ class JiraTab(Vertical):
     def _update_issue_detail(self, issue: JiraIssue, worklogs: list[JiraWorklog]) -> None:
         self.selected_issue = issue
         detail = self.query_one("#issue-detail", IssueDetail)
+        detail.jira_base_url = self._settings.jira_base_url if self._settings else ""
         detail.issue = issue
         detail.set_worklogs(worklogs)
 

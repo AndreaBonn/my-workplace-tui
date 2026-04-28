@@ -12,6 +12,7 @@ SEPARATOR = "─" * 50
 class IssueDetail(VerticalScroll):
     issue: reactive[JiraIssue | None] = reactive(None)
     comments: reactive[list[JiraComment]] = reactive(list, init=False)
+    jira_base_url: str = ""
     worklogs: reactive[list[JiraWorklog]] = reactive(list, init=False)
 
     def compose(self) -> ComposeResult:
@@ -32,6 +33,14 @@ class IssueDetail(VerticalScroll):
         )
         logged = seconds_to_jira_duration(issue.logged_seconds) if issue.logged_seconds else "-"
 
+        project_key = issue.key.split("-")[0] if "-" in issue.key else ""
+        issue_url = f"{self.jira_base_url}/browse/{issue.key}" if self.jira_base_url else ""
+        board_url = (
+            f"{self.jira_base_url}/jira/software/projects/{project_key}/board"
+            if self.jira_base_url and project_key
+            else ""
+        )
+
         header = (
             f"  {issue.key}\n"
             f"  {issue.summary}\n"
@@ -50,6 +59,13 @@ class IssueDetail(VerticalScroll):
         )
         if issue.labels:
             header += f"  Label:      {', '.join(issue.labels)}\n"
+        if issue_url:
+            header += (
+                f"{SEPARATOR}\n"
+                f"  Issue:      {issue_url}\n"
+                f"  Board:      {board_url}\n"
+                f"              (premi 'o' per aprire nel browser)\n"
+            )
 
         description = ""
         if issue.description_text:
