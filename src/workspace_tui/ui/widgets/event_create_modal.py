@@ -1,9 +1,9 @@
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Checkbox, Input, Label, TextArea
+from textual.widgets import Button, Checkbox, Input, Label
 
 
 class EventCreateData(Message):
@@ -66,19 +66,16 @@ class EventCreateModal(ModalScreen):
         background: $primary 20%;
     }
 
-    #event-create-container TextArea {
-        height: 4;
+    #event-allday {
+        height: auto;
         min-height: 3;
-    }
-
-    #event-create-container Checkbox {
-        height: 1;
         margin-top: 1;
     }
 
     #create-title {
         text-style: bold;
         padding-bottom: 1;
+        margin-top: 0;
     }
 
     .time-row {
@@ -95,11 +92,19 @@ class EventCreateModal(ModalScreen):
         padding: 0 1;
         margin-top: 0;
     }
+
+    #event-actions {
+        height: auto;
+        margin-top: 1;
+        align: right middle;
+    }
+
+    #event-actions Button {
+        margin-left: 1;
+    }
     """
 
     def compose(self) -> ComposeResult:
-        from textual.containers import VerticalScroll
-
         with Vertical(id="event-create-container"):
             yield Label("Nuovo evento", id="create-title")
             with VerticalScroll(id="event-create-scroll"):
@@ -109,7 +114,7 @@ class EventCreateModal(ModalScreen):
                 yield Input(id="event-date", placeholder="29/04/2026")
                 yield Checkbox("Tutto il giorno", id="event-allday")
                 yield Label("Ora inizio - fine (HH:MM):")
-                with Vertical(classes="time-row"):
+                with Horizontal(classes="time-row"):
                     yield Input(id="event-start", placeholder="09:00", value="09:00")
                     yield Input(id="event-end", placeholder="10:00", value="10:00")
                 yield Label("Luogo:")
@@ -117,20 +122,29 @@ class EventCreateModal(ModalScreen):
                 yield Label("Partecipanti (email separate da virgola):")
                 yield Input(id="event-attendees", placeholder="a@email.com, b@email.com")
                 yield Label("Descrizione:")
-                yield TextArea(id="event-description")
-            yield Label("[Ctrl+Enter] Crea   [Esc] Annulla")
+                yield Input(id="event-description", placeholder="Opzionale")
+            with Horizontal(id="event-actions"):
+                yield Button("Crea", variant="primary", id="btn-create")
+                yield Button("Annulla", variant="default", id="btn-cancel")
 
     def on_mount(self) -> None:
         self.query_one("#event-summary", Input).focus()
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         if event.checkbox.id == "event-allday":
-            start_input = self.query_one("#event-start", Input)
-            end_input = self.query_one("#event-end", Input)
-            start_input.disabled = event.value
-            end_input.disabled = event.value
+            self.query_one("#event-start", Input).disabled = event.value
+            self.query_one("#event-end", Input).disabled = event.value
 
-    def key_ctrl_enter(self) -> None:
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-create":
+            self._submit()
+        elif event.button.id == "btn-cancel":
+            self.dismiss(None)
+
+    def on_input_submitted(self, _event: Input.Submitted) -> None:
+        self._submit()
+
+    def _submit(self) -> None:
         summary = self.query_one("#event-summary", Input).value.strip()
         date = self.query_one("#event-date", Input).value.strip()
         start_time = self.query_one("#event-start", Input).value.strip()
@@ -138,7 +152,7 @@ class EventCreateModal(ModalScreen):
         all_day = self.query_one("#event-allday", Checkbox).value
         location = self.query_one("#event-location", Input).value.strip()
         attendees = self.query_one("#event-attendees", Input).value.strip()
-        description = self.query_one("#event-description", TextArea).text
+        description = self.query_one("#event-description", Input).value.strip()
 
         if not summary:
             self.app.notify("Titolo obbligatorio", severity="error")
