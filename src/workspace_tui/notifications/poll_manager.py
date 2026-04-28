@@ -13,6 +13,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from workspace_tui.notifications.notifier import Notifier
+    from workspace_tui.services.calendar import CalendarService
+    from workspace_tui.services.chat import ChatService
+    from workspace_tui.services.gmail import GmailService
+    from workspace_tui.services.jira import JiraService
 
 
 @dataclass
@@ -66,10 +70,10 @@ class PollManager:
         self._stop = threading.Event()
         self._timers: list[threading.Timer] = []
 
-        self._gmail_service = None
-        self._calendar_service = None
-        self._chat_service = None
-        self._jira_service = None
+        self._gmail_service: GmailService | None = None
+        self._calendar_service: CalendarService | None = None
+        self._chat_service: ChatService | None = None
+        self._jira_service: JiraService | None = None
 
         self._gmail_interval = 60
         self._calendar_interval = 300
@@ -79,10 +83,10 @@ class PollManager:
     def configure(
         self,
         *,
-        gmail_service=None,
-        calendar_service=None,
-        chat_service=None,
-        jira_service=None,
+        gmail_service: GmailService | None = None,
+        calendar_service: CalendarService | None = None,
+        chat_service: ChatService | None = None,
+        jira_service: JiraService | None = None,
         gmail_interval: int = 60,
         calendar_interval: int = 300,
         chat_interval: int = 30,
