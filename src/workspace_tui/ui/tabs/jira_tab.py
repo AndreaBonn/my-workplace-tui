@@ -24,14 +24,14 @@ class JiraTab(Vertical):
         Binding("c", "create_issue", "Crea issue", show=True),
         Binding("t", "transition", "Cambia stato", show=True),
         Binding("w", "worklog", "Log ore", show=True),
-        Binding("C", "add_comment", "Commento", show=False),
-        Binding("o", "open_browser", "Apri browser", show=False),
+        Binding("C", "add_comment", "Commento", show=True),
+        Binding("o", "open_browser", "Apri browser", show=True),
         Binding("slash", "search_jql", "Cerca/JQL", show=True),
-        Binding("f1", "saved_jql_1", "F1", show=False),
-        Binding("f2", "saved_jql_2", "F2", show=False),
-        Binding("f3", "saved_jql_3", "F3", show=False),
-        Binding("f4", "saved_jql_4", "F4", show=False),
-        Binding("f5", "saved_jql_5", "F5", show=False),
+        Binding("f1", "saved_jql_1", "F1", show=True),
+        Binding("f2", "saved_jql_2", "F2", show=True),
+        Binding("f3", "saved_jql_3", "F3", show=True),
+        Binding("f4", "saved_jql_4", "F4", show=True),
+        Binding("f5", "saved_jql_5", "F5", show=True),
     ]
 
     jira_service: reactive[JiraService | None] = reactive(None, init=False)

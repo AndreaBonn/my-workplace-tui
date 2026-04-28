@@ -24,14 +24,14 @@ class GmailTab(Vertical):
     BINDINGS = [
         Binding("c", "compose", "Componi", show=True),
         Binding("r", "reply", "Rispondi", show=True),
-        Binding("R", "reply_all", "Rispondi tutti", show=False),
-        Binding("f", "forward", "Inoltra", show=False),
+        Binding("R", "reply_all", "Rispondi tutti", show=True),
+        Binding("f", "forward", "Inoltra", show=True),
         Binding("d", "trash", "Cestina", show=True),
-        Binding("e", "archive", "Archivia", show=False),
-        Binding("m", "toggle_read", "Letto/Non letto", show=False),
-        Binding("s", "toggle_star", "Stella", show=False),
+        Binding("e", "archive", "Archivia", show=True),
+        Binding("m", "toggle_read", "Letto/Non letto", show=True),
+        Binding("s", "toggle_star", "Stella", show=True),
         Binding("slash", "search", "Cerca", show=True),
-        Binding("a", "download_attachment", "Scarica allegato", show=False),
+        Binding("a", "download_attachment", "Scarica allegato", show=True),
     ]
 
     gmail_service: reactive[GmailService | None] = reactive(None, init=False)

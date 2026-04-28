@@ -28,8 +28,8 @@ class SpaceItem(ListItem):
 class ChatTab(Vertical):
     BINDINGS = [
         Binding("i", "focus_input", "Scrivi", show=True),
-        Binding("g", "scroll_top", "Inizio", show=False),
-        Binding("G", "scroll_bottom", "Fine", show=False),
+        Binding("g", "scroll_top", "Inizio", show=True),
+        Binding("G", "scroll_bottom", "Fine", show=True),
     ]
 
     chat_service: reactive[ChatService | None] = reactive(None, init=False)

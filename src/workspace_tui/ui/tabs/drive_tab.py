@@ -22,15 +22,15 @@ class FileItem(ListItem):
 
 class DriveFileList(ListView):
     BINDINGS = [
-        Binding("j", "cursor_down", "Giù", show=False),
-        Binding("k", "cursor_up", "Su", show=False),
+        Binding("j", "cursor_down", "Giù", show=True),
+        Binding("k", "cursor_up", "Su", show=True),
         Binding("enter", "select_cursor", "Apri", show=True),
         Binding("backspace", "go_up", "Indietro", show=True),
         Binding("d", "download", "Scarica", show=True),
         Binding("R", "view_recent", "Recenti", show=True),
-        Binding("S", "view_shared", "Condivisi", show=False),
-        Binding("M", "view_root", "Il mio Drive", show=False),
-        Binding("slash", "search_drive", "Cerca", show=False),
+        Binding("S", "view_shared", "Condivisi", show=True),
+        Binding("M", "view_root", "Il mio Drive", show=True),
+        Binding("slash", "search_drive", "Cerca", show=True),
     ]
 
     def action_go_up(self) -> None:

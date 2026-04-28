@@ -14,7 +14,7 @@ class CalendarTab(Vertical):
         Binding("l", "next_period", "Successivo", show=True),
         Binding("t", "go_today", "Oggi", show=True),
         Binding("c", "create_event", "Crea evento", show=True),
-        Binding("d", "delete_event", "Elimina", show=False),
+        Binding("d", "delete_event", "Elimina", show=True),
         Binding("v", "toggle_view", "Cambia vista", show=True),
     ]
 
