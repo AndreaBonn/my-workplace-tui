@@ -64,9 +64,8 @@ StatusBar {
 }
 
 #email-list > EmailListItem {
-    height: auto;
+    height: 3;
     padding: 0;
-    border-bottom: dashed $surface-lighten-2;
 }
 
 #email-list > EmailListItem.unread {

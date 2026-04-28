@@ -54,30 +54,30 @@ class EmailListItem(ListItem):
         subject_display = m.header.subject or "(nessun oggetto)"
         snippet = m.snippet or ""
 
-        line1 = Text()
+        content = Text()
         if is_unread:
-            line1.append(" ● ", style="bold dodger_blue1")
+            content.append(" ● ", style="bold dodger_blue1")
         else:
-            line1.append("   ")
+            content.append("   ")
         if m.is_starred:
-            line1.append("★ ", style="yellow")
+            content.append("★ ", style="yellow")
         else:
-            line1.append("  ")
-        line1.append(sender_name.ljust(FROM_COL_WIDTH), style=base_style)
-        line1.append("  ")
-        line1.append(date_str.rjust(DATE_COL_WIDTH), style="italic " + muted_style)
+            content.append("  ")
+        content.append(sender_name.ljust(FROM_COL_WIDTH), style=base_style)
+        content.append("  ")
+        content.append(date_str.rjust(DATE_COL_WIDTH), style="italic " + muted_style)
 
-        line2 = Text()
-        line2.append("     ")
+        content.append("\n")
+
+        content.append("     ")
         remaining_width = max(10, FROM_COL_WIDTH + DATE_COL_WIDTH + 2)
         subj_text = truncate(subject_display, max_length=remaining_width)
-        line2.append(subj_text, style=base_style)
+        content.append(subj_text, style=base_style)
         if snippet and len(subj_text) < remaining_width - 5:
             snip = truncate(snippet, max_length=remaining_width - len(subj_text) - 3)
-            line2.append(f" — {snip}", style="dim italic")
+            content.append(f" — {snip}", style="dim italic")
 
-        yield Static(line1)
-        yield Static(line2)
+        yield Static(content)
 
 
 class EmailListView(ListView):
