@@ -41,11 +41,14 @@ class EventCreateModal(ModalScreen):
 
     #event-create-container {
         width: 70%;
-        height: auto;
-        max-height: 85%;
+        height: 80%;
         background: $surface;
         border: thick $accent;
         padding: 1 2;
+    }
+
+    #event-create-scroll {
+        height: 1fr;
     }
 
     #event-create-container Label {
@@ -95,23 +98,26 @@ class EventCreateModal(ModalScreen):
     """
 
     def compose(self) -> ComposeResult:
+        from textual.containers import VerticalScroll
+
         with Vertical(id="event-create-container"):
             yield Label("Nuovo evento", id="create-title")
-            yield Label("Titolo:")
-            yield Input(id="event-summary", placeholder="Titolo evento")
-            yield Label("Data (GG/MM/AAAA):")
-            yield Input(id="event-date", placeholder="29/04/2026")
-            yield Checkbox("Tutto il giorno", id="event-allday")
-            yield Label("Ora inizio - fine (HH:MM):")
-            with Vertical(classes="time-row"):
-                yield Input(id="event-start", placeholder="09:00", value="09:00")
-                yield Input(id="event-end", placeholder="10:00", value="10:00")
-            yield Label("Luogo:")
-            yield Input(id="event-location", placeholder="Opzionale")
-            yield Label("Partecipanti (email separate da virgola):")
-            yield Input(id="event-attendees", placeholder="a@email.com, b@email.com")
-            yield Label("Descrizione:")
-            yield TextArea(id="event-description")
+            with VerticalScroll(id="event-create-scroll"):
+                yield Label("Titolo:")
+                yield Input(id="event-summary", placeholder="Titolo evento")
+                yield Label("Data (GG/MM/AAAA):")
+                yield Input(id="event-date", placeholder="29/04/2026")
+                yield Checkbox("Tutto il giorno", id="event-allday")
+                yield Label("Ora inizio - fine (HH:MM):")
+                with Vertical(classes="time-row"):
+                    yield Input(id="event-start", placeholder="09:00", value="09:00")
+                    yield Input(id="event-end", placeholder="10:00", value="10:00")
+                yield Label("Luogo:")
+                yield Input(id="event-location", placeholder="Opzionale")
+                yield Label("Partecipanti (email separate da virgola):")
+                yield Input(id="event-attendees", placeholder="a@email.com, b@email.com")
+                yield Label("Descrizione:")
+                yield TextArea(id="event-description")
             yield Label("[Ctrl+Enter] Crea   [Esc] Annulla")
 
     def on_mount(self) -> None:
