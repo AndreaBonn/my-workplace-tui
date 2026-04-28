@@ -6,8 +6,8 @@ from workspace_tui.cache.cache_manager import CacheManager
 from workspace_tui.services.base import BaseService
 from workspace_tui.services.errors import (
     AuthenticationError,
-    ConnectionError,
-    PermissionError,
+    ConnectionFailedError,
+    PermissionDeniedError,
     RateLimitError,
     ServiceError,
 )
@@ -47,9 +47,9 @@ class TestRetry:
 
     def test_raises_permission_error_immediately(self, service):
         def perm_error():
-            raise PermissionError("No access")
+            raise PermissionDeniedError("No access")
 
-        with pytest.raises(PermissionError):
+        with pytest.raises(PermissionDeniedError):
             service._retry(perm_error)
 
     def test_calls_auth_refresh_on_401(self, service):
@@ -87,12 +87,12 @@ class TestCategorizeError:
     def test_connection_error_detected(self, service):
         err = OSError("Connection refused")
         result = service._categorize_error(err)
-        assert isinstance(result, ConnectionError)
+        assert isinstance(result, ConnectionFailedError)
 
     def test_timeout_error_detected(self, service):
         err = TimeoutError("Request timeout")
         result = service._categorize_error(err)
-        assert isinstance(result, ConnectionError)
+        assert isinstance(result, ConnectionFailedError)
 
 
 class TestCategorizeHttpStatus:
@@ -100,7 +100,7 @@ class TestCategorizeHttpStatus:
         assert isinstance(service._categorize_http_status(401, ""), AuthenticationError)
 
     def test_403(self, service):
-        assert isinstance(service._categorize_http_status(403, ""), PermissionError)
+        assert isinstance(service._categorize_http_status(403, ""), PermissionDeniedError)
 
     def test_429(self, service):
         assert isinstance(service._categorize_http_status(429, ""), RateLimitError)
@@ -140,7 +140,7 @@ class TestCategorizeErrorHttpError:
         mock_response = type("Response", (), {"status_code": 403})()
         exc.response = mock_response
         result = service._categorize_error(exc)
-        assert isinstance(result, PermissionError)
+        assert isinstance(result, PermissionDeniedError)
 
     def test_unknown_error_returns_service_error(self, service):
         exc = ValueError("something weird")

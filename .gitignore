@@ -39,6 +39,7 @@ coverage.xml
 *.swp
 *.swo
 *~
+~/
 
 # OS
 .DS_Store

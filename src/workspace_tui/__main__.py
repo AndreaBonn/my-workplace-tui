@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 from loguru import logger
 
@@ -7,7 +8,7 @@ from workspace_tui.config.settings import load_settings
 
 
 def setup_logging() -> None:
-    log_dir = "~/.local/share/workspace-tui/logs"
+    log_dir = str(Path("~/.local/share/workspace-tui/logs").expanduser())
     logger.remove()
     logger.add(
         f"{log_dir}/app.log",

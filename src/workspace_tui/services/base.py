@@ -8,8 +8,8 @@ from loguru import logger
 from workspace_tui.cache.cache_manager import CacheManager
 from workspace_tui.services.errors import (
     AuthenticationError,
-    ConnectionError,
-    PermissionError,
+    ConnectionFailedError,
+    PermissionDeniedError,
     RateLimitError,
     ServiceError,
 )
@@ -69,10 +69,10 @@ class BaseService:
                     on_auth_error()
                     continue
 
-                if isinstance(error, PermissionError | AuthenticationError):
+                if isinstance(error, PermissionDeniedError | AuthenticationError):
                     raise error from exc
 
-                is_retryable = isinstance(error, RateLimitError | ConnectionError) or (
+                is_retryable = isinstance(error, RateLimitError | ConnectionFailedError) or (
                     isinstance(error, ServiceError) and error.code == "SERVER_ERROR"
                 )
                 if is_retryable and attempt < max_retries:
@@ -110,7 +110,7 @@ class BaseService:
             return self._categorize_http_status(exc.response.status_code, str(exc))
 
         if "connection" in exc_str or "timeout" in exc_str:
-            return ConnectionError(service=self.__class__.__name__)
+            return ConnectionFailedError(service=self.__class__.__name__)
 
         return ServiceError(message=str(exc))
 
@@ -118,7 +118,7 @@ class BaseService:
         if status_code == 401:
             return AuthenticationError()
         if status_code == 403:
-            return PermissionError()
+            return PermissionDeniedError()
         if status_code == 404:
             return ServiceError(message=message, code="NOT_FOUND")
         if status_code == 429:
