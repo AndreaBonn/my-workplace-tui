@@ -25,9 +25,9 @@ echo "[OK] Python ${PYTHON_VERSION}"
 
 # Check uv
 if ! command -v uv &> /dev/null; then
-    echo "Installazione uv..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.local/bin:$PATH"
+    echo "Errore: uv non trovato."
+    echo "Installa uv prima di procedere: https://docs.astral.sh/uv/getting-started/installation/"
+    exit 1
 fi
 echo "[OK] uv $(uv --version)"
 
