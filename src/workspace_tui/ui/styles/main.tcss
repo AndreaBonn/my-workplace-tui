@@ -113,12 +113,26 @@ StatusBar {
 
 #jira-filters {
     height: auto;
-    max-height: 22;
+    max-height: 14;
     padding: 0;
 }
 
 #jira-filters Input {
+    height: 1;
+    border: none;
     margin: 0;
+    padding: 0 1;
+    background: $surface;
+}
+
+#jira-filters Input:focus {
+    background: $primary 20%;
+}
+
+#jira-filters Checkbox {
+    height: 1;
+    margin: 0;
+    padding: 0 1;
 }
 
 .filter-label {

@@ -53,24 +53,17 @@ class JiraTab(Vertical):
         with Horizontal(id="jira-layout"):
             with Vertical(id="jira-left-panel"):
                 with Vertical(id="jira-filters"):
-                    yield Static(" FILTRI  (Enter per cercare)", classes="panel-title")
-                    yield Static(" Progetto:", classes="filter-label")
+                    yield Static(" FILTRI (Enter per cercare)", classes="panel-title")
                     yield Input(
-                        placeholder="es. TAGAIT",
+                        placeholder="Progetto: es. TAGAIT",
                         id="filter-project",
                         value=self._settings.jira_default_project if self._settings else "",
                     )
-                    yield Static(" Testo:", classes="filter-label")
-                    yield Input(placeholder="parola chiave", id="filter-text")
+                    yield Input(placeholder="Testo: parola chiave", id="filter-text")
+                    yield Input(placeholder="Assegnato: nome persona", id="filter-assignee")
+                    yield Input(placeholder="Stato: es. In corso", id="filter-status")
                     yield Checkbox("Assegnati a me", id="filter-my-issues")
-                    yield Static(" Assegnato:", classes="filter-label")
-                    yield Input(
-                        placeholder="nome persona (ignora se flag attivo)", id="filter-assignee"
-                    )
-                    yield Static(" Stato:", classes="filter-label")
-                    yield Input(placeholder="es. In corso", id="filter-status")
-                    yield Static(" JQL:", classes="filter-label")
-                    yield Input(placeholder="query JQL diretta", id="filter-jql")
+                    yield Input(placeholder="JQL: query diretta", id="filter-jql")
                 yield Static("Issue", classes="panel-title")
                 yield IssueListView(id="issue-list")
             with Vertical(id="jira-right-panel"):
