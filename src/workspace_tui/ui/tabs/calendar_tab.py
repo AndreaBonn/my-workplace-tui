@@ -39,23 +39,17 @@ def _render_event_label(ev: CalendarEvent) -> str:
     dt = parse_date(ev.start)
 
     if ev.all_day:
-        title = ev.summary
-        if ev.html_link:
-            title = f"[link={ev.html_link}]{ev.summary}[/link]"
-        return f"[bold yellow]▪ TUTTO IL GIORNO[/]  [bold]{title}[/]"
+        return f"[bold yellow]▪ TUTTO IL GIORNO[/]  [bold]{ev.summary}[/]"
 
     time_str = format_time(dt) if dt else "??:??"
-    title = ev.summary
-    if ev.html_link:
-        title = f"[link={ev.html_link}]{ev.summary}[/link]"
 
     badges = ""
     if ev.location:
         badges += f"  [dim]📍 {ev.location}[/]"
     if ev.meet_link:
-        badges += f"  [link={ev.meet_link}][green]🔗 Meet[/green][/link]"
+        badges += "  [green]🔗 Meet[/]"
 
-    line = f"[bold cyan]{time_str}[/]  [bold]{title}[/]{badges}"
+    line = f"[bold cyan]{time_str}[/]  [bold]{ev.summary}[/]{badges}"
 
     if ev.attendees:
         names = ", ".join(_attendee_name(a) for a in ev.attendees[:4])
