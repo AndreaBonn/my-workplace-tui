@@ -6,6 +6,8 @@ from textual.widgets import Static
 from workspace_tui.services.jira import JiraComment, JiraIssue, JiraWorklog
 from workspace_tui.utils.date_utils import format_relative, parse_date, seconds_to_jira_duration
 
+SEPARATOR = "─" * 50
+
 
 class IssueDetail(VerticalScroll):
     issue: reactive[JiraIssue | None] = reactive(None)
@@ -31,33 +33,51 @@ class IssueDetail(VerticalScroll):
         logged = seconds_to_jira_duration(issue.logged_seconds) if issue.logged_seconds else "-"
 
         header = (
-            f"{issue.key} · {issue.issue_type} · Priorità: {issue.priority}\n"
-            f"{issue.summary}\n\n"
-            f"Assegnato: {issue.assignee or 'Non assegnato'}\n"
-            f"Reporter: {issue.reporter}\n"
-            f"Sprint: {issue.sprint or '-'}\n"
-            f"Stima: {estimate}  │  Logged: {logged}\n"
-            f"Stato: {issue.status}"
+            f"  {issue.key}\n"
+            f"  {issue.summary}\n"
+            f"\n"
+            f"{SEPARATOR}\n"
+            f"  Tipo:       {issue.issue_type}\n"
+            f"  Priorita:   {issue.priority}\n"
+            f"  Stato:      {issue.status}\n"
+            f"{SEPARATOR}\n"
+            f"  Assegnato:  {issue.assignee or 'Non assegnato'}\n"
+            f"  Reporter:   {issue.reporter}\n"
+            f"  Sprint:     {issue.sprint or '-'}\n"
+            f"{SEPARATOR}\n"
+            f"  Stima:      {estimate}\n"
+            f"  Logged:     {logged}\n"
         )
+        if issue.labels:
+            header += f"  Label:      {', '.join(issue.labels)}\n"
 
         description = ""
         if issue.description_text:
-            description = f"── Descrizione ──\n{issue.description_text}"
+            description = f"\n{SEPARATOR}\n  DESCRIZIONE\n{SEPARATOR}\n\n{issue.description_text}\n"
 
         links_text = ""
         if issue.subtasks:
-            lines = ["── Subtask ──"]
+            lines = [
+                f"\n{SEPARATOR}",
+                "  SUBTASK",
+                SEPARATOR,
+                "",
+            ]
             for st in issue.subtasks:
-                lines.append(f"  {st['key']} [{st['status']}] {st['summary']}")
-            links_text += "\n".join(lines)
+                status_str = st["status"]
+                lines.append(f"  {st['key']:<12} {status_str:<15} {st['summary']}")
+            links_text += "\n".join(lines) + "\n"
 
         if issue.links:
-            lines = ["── Link ──"]
+            lines = [
+                f"\n{SEPARATOR}",
+                "  LINK",
+                SEPARATOR,
+                "",
+            ]
             for link in issue.links:
-                lines.append(f"  {link['type']}: {link['issue_key']} — {link['summary']}")
-            if links_text:
-                links_text += "\n\n"
-            links_text += "\n".join(lines)
+                lines.append(f"  {link['issue_key']:<12} {link['type']:<15} {link['summary']}")
+            links_text += "\n".join(lines) + "\n"
 
         self.query_one("#issue-header", Static).update(header)
         self.query_one("#issue-description", Static).update(description)
@@ -69,12 +89,19 @@ class IssueDetail(VerticalScroll):
             self.query_one("#issue-worklogs", Static).update("")
             return
 
-        lines = ["── Worklogs ──"]
+        lines = [
+            f"\n{SEPARATOR}",
+            "  WORKLOGS",
+            SEPARATOR,
+            "",
+        ]
         for wl in worklogs:
             date_str = ""
             dt = parse_date(wl.started)
             if dt:
                 date_str = format_relative(dt)
-            comment = f"  {wl.comment}" if wl.comment else ""
-            lines.append(f"  {wl.time_spent} · {wl.author} · {date_str}{comment}")
+            lines.append(f"  {wl.time_spent:<10} {wl.author:<20} {date_str}")
+            if wl.comment:
+                lines.append(f"             {wl.comment}")
+            lines.append("")
         self.query_one("#issue-worklogs", Static).update("\n".join(lines))

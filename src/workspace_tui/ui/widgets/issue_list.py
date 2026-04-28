@@ -7,6 +7,25 @@ from textual.widgets import ListItem, ListView, Static
 from workspace_tui.services.jira import JiraIssue
 from workspace_tui.utils.text_utils import truncate
 
+STATUS_ICONS = {
+    "Da completare": "○",
+    "To Do": "○",
+    "In corso": "◉",
+    "In Progress": "◉",
+    "In Review": "◈",
+    "Done": "●",
+    "Completato": "●",
+}
+
+PRIORITY_ICONS = {
+    "Highest": "⬆⬆",
+    "High": "⬆",
+    "Grave": "⬆",
+    "Medium": "─",
+    "Low": "⬇",
+    "Lowest": "⬇⬇",
+}
+
 
 class IssueSelected(Message):
     def __init__(self, issue: JiraIssue) -> None:
@@ -20,17 +39,21 @@ class IssueListItem(ListItem):
         self.issue = issue
 
     def compose(self) -> ComposeResult:
-        status_badge = f"[{self.issue.status}]"
-        summary = truncate(self.issue.summary, max_length=45)
-        yield Static(f"{self.issue.key}  {status_badge}\n  {summary}")
+        status_icon = STATUS_ICONS.get(self.issue.status, "◌")
+        priority_icon = PRIORITY_ICONS.get(self.issue.priority, " ")
+        summary = truncate(self.issue.summary, max_length=42)
+        yield Static(
+            f" {status_icon} {self.issue.key:<12} {priority_icon}\n   {summary}",
+            markup=False,
+        )
 
 
 class IssueListView(ListView):
     BINDINGS = [
-        Binding("j", "cursor_down", "Giù", show=False),
-        Binding("k", "cursor_up", "Su", show=False),
-        Binding("g", "scroll_home", "Inizio", show=False),
-        Binding("G", "scroll_end", "Fine", show=False),
+        Binding("j", "cursor_down", "Giù", show=True),
+        Binding("k", "cursor_up", "Su", show=True),
+        Binding("g", "scroll_home", "Inizio", show=True),
+        Binding("G", "scroll_end", "Fine", show=True),
     ]
 
     issues: reactive[list[JiraIssue]] = reactive(list, init=False)
