@@ -130,15 +130,50 @@ class JiraTab(Vertical):
             query = event.value.strip()
             if not query:
                 self._load_default_issues()
-            elif any(kw in query.lower() for kw in ("=", "and", "or", "order by")):
+            elif any(kw in query.lower() for kw in ("=", "and", "or", "order by", "~")):
                 self._execute_jql(query)
             else:
-                project = self._settings.jira_default_project if self._settings else ""
-                if project:
-                    jql = f'project = {project} AND text ~ "{query}" ORDER BY updated DESC'
-                else:
-                    jql = f'text ~ "{query}" ORDER BY updated DESC'
+                jql = self._build_text_search_jql(query)
                 self._execute_jql(jql)
+
+    def _build_text_search_jql(self, query: str) -> str:
+        """Build JQL for free-text search with partial matching.
+
+        Supports:
+        - Partial words: "dashb" matches "dashboard"
+        - Multiple words: "dashboard quicksight" matches both
+        - Project code prefix: "TAGAIT" filters by project
+        - Names: "vincenzo" matches assignee/reporter
+        """
+        import re
+
+        words = query.split()
+        conditions = []
+
+        project_pattern = re.compile(r"^[A-Z][A-Z0-9]+$")
+        project_words = [w for w in words if project_pattern.match(w)]
+        search_words = [w for w in words if not project_pattern.match(w)]
+
+        for proj in project_words:
+            conditions.append(f"project = {proj}")
+
+        if not project_words and self._settings and self._settings.jira_default_project:
+            pass
+
+        for word in search_words:
+            safe_word = word.replace('"', '\\"')
+            conditions.append(
+                f'(summary ~ "{safe_word}*" OR description ~ "{safe_word}*"'
+                f' OR assignee = "{safe_word}" OR reporter = "{safe_word}")'
+            )
+
+        if not conditions:
+            safe_query = query.replace('"', '\\"')
+            conditions.append(f'text ~ "{safe_query}*"')
+
+        jql = " AND ".join(conditions) + " ORDER BY updated DESC"
+        self._execute_jql(jql)
+        return jql
 
     def action_create_issue(self) -> None:
         if not self.jira_service:
