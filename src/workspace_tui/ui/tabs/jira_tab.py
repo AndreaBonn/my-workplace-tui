@@ -87,7 +87,7 @@ class JiraTab(Vertical):
         if project:
             jql = f"project = {project} AND status != Done ORDER BY updated DESC"
         else:
-            jql = "assignee = currentUser() AND status != Done ORDER BY updated DESC"
+            jql = "status != Done ORDER BY updated DESC"
         self._execute_jql(jql)
 
     def _execute_jql(self, jql: str) -> None:
@@ -160,7 +160,9 @@ class JiraTab(Vertical):
         conditions = []
 
         if project:
-            conditions.append(f"project = {project}")
+            project_condition = self._resolve_project_filter(project)
+            if project_condition:
+                conditions.append(project_condition)
         if text:
             safe_text = text.replace('"', '\\"')
             conditions.append(f'(summary ~ "{safe_text}*" OR description ~ "{safe_text}*")')
@@ -177,6 +179,39 @@ class JiraTab(Vertical):
 
         jql = " AND ".join(conditions) + " ORDER BY updated DESC"
         self._execute_jql(jql)
+
+    def _resolve_project_filter(self, project_input: str) -> str:
+        """Resolve partial project codes to JQL condition.
+
+        Exact match: "TAGAIT" → project = TAGAIT
+        Partial match: "TAG" → project in (TAGAIT, TAGOPS, ...) using API project list
+        """
+        upper_input = project_input.upper()
+
+        if not self.jira_service:
+            return f"project = {upper_input}"
+
+        try:
+            projects = self.jira_service.list_projects()
+            exact = [p for p in projects if p.get("key", "").upper() == upper_input]
+            if exact:
+                return f"project = {exact[0]['key']}"
+
+            partial = [
+                p["key"]
+                for p in projects
+                if upper_input in p.get("key", "").upper()
+                or upper_input in p.get("name", "").upper()
+            ]
+            if len(partial) == 1:
+                return f"project = {partial[0]}"
+            if len(partial) > 1:
+                keys = ", ".join(partial)
+                return f"project in ({keys})"
+        except Exception:
+            pass
+
+        return f"project = {upper_input}"
 
     def action_create_issue(self) -> None:
         if not self.jira_service:
