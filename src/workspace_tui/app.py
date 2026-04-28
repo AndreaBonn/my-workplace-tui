@@ -10,6 +10,7 @@ from workspace_tui.auth.oauth import load_or_create_credentials
 from workspace_tui.cache.cache_manager import CacheManager
 from workspace_tui.config.settings import Settings
 from workspace_tui.notifications.notifier import Notifier
+from workspace_tui.notifications.poll_manager import PollManager, PollResult
 from workspace_tui.services.calendar import CalendarService
 from workspace_tui.services.chat import ChatService
 from workspace_tui.services.drive import DriveService
@@ -48,6 +49,10 @@ class WorkspaceTUI(App):
         self.settings = settings
         self._cache = CacheManager(enabled=settings.cache_enabled)
         self._notifier = Notifier(enabled=settings.notifications_enabled)
+        self._poll_manager = PollManager(
+            notifier=self._notifier,
+            on_update=self._handle_poll_update,
+        )
         self._gmail_service: GmailService | None = None
         self._calendar_service: CalendarService | None = None
         self._drive_service: DriveService | None = None
@@ -95,7 +100,6 @@ class WorkspaceTUI(App):
 
             self.app.call_from_thread(self._wire_google_services)
             logger.info("Google services initialized")
-
         except ConfigurationError as exc:
             self.app.call_from_thread(self._set_status, "Errore config")
             self.app.call_from_thread(self.notify, str(exc.message), severity="error", timeout=10)
@@ -123,6 +127,33 @@ class WorkspaceTUI(App):
                 )
                 logger.error("Failed to initialize Jira: {}", exc)
 
+        self._start_polling()
+
+    def _start_polling(self) -> None:
+        self._poll_manager.configure(
+            gmail_service=self._gmail_service,
+            calendar_service=self._calendar_service,
+            chat_service=self._chat_service,
+            jira_service=self._jira_service,
+            gmail_interval=self.settings.gmail_poll_interval,
+            calendar_interval=self.settings.calendar_poll_interval,
+            chat_interval=self.settings.chat_poll_interval,
+            jira_interval=self.settings.jira_poll_interval,
+        )
+        self._poll_manager.start()
+
+    def _handle_poll_update(self, result: PollResult) -> None:
+        def update_ui() -> None:
+            status_bar = self.query_one(StatusBar)
+            if result.gmail_unread:
+                status_bar.unread_count = result.gmail_unread
+            if result.jira_assigned:
+                status_bar.jira_count = result.jira_assigned
+            if result.timestamp:
+                status_bar.last_update = result.timestamp
+
+        self.call_from_thread(update_ui)
+
     def _set_status(self, status: str) -> None:
         self.query_one(StatusBar).connection_status = status
 
@@ -147,6 +178,7 @@ class WorkspaceTUI(App):
         tabbed_content.active = tab_id
 
     def action_request_quit(self) -> None:
+        self._poll_manager.stop()
         self._cache.close()
         self.exit()
 
