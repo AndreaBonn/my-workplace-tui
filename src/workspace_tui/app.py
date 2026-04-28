@@ -65,6 +65,7 @@ class WorkspaceTUI(App):
             with TabPane("[4] Drive", id="drive"):
                 yield DriveTab(
                     workspace_domain=self.settings.workspace_domain,
+                    download_dir=self.settings.drive_download_dir,
                 )
             with TabPane("[5] Jira", id="jira"):
                 yield JiraTab(

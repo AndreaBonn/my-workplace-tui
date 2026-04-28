@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # Google Drive
     workspace_domain: str = ""
+    drive_download_dir: Path = Path("~/Scaricati")
 
     # Cache
     cache_enabled: bool = True
@@ -67,6 +68,11 @@ class Settings(BaseSettings):
             if value:
                 filters[i] = value
         return filters
+
+    @field_validator("drive_download_dir", mode="before")
+    @classmethod
+    def expand_download_dir(cls, v: str | Path) -> Path:
+        return Path(str(v)).expanduser()
 
     @field_validator(
         "gmail_poll_interval",

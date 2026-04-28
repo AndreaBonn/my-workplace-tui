@@ -85,9 +85,15 @@ class DriveTab(Vertical):
     folder_stack: reactive[list[str]] = reactive(list, init=False)
     selected_file: reactive[DriveFile | None] = reactive(None, init=False)
 
-    def __init__(self, workspace_domain: str = "", **kwargs) -> None:
+    def __init__(
+        self,
+        workspace_domain: str = "",
+        download_dir: Path | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self._workspace_domain = workspace_domain.lower().strip()
+        self._download_dir = download_dir or Path.home() / "Scaricati"
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="drive-layout"):
@@ -464,8 +470,8 @@ class DriveTab(Vertical):
             )
             return
         file = self.selected_file
-        dest = Path.home() / "Downloads"
-        dest.mkdir(exist_ok=True)
+        dest = self._download_dir
+        dest.mkdir(parents=True, exist_ok=True)
         self.app.run_worker(
             lambda: self.drive_service.download_file(
                 file_id=file.file_id,
@@ -474,7 +480,7 @@ class DriveTab(Vertical):
             ),
             thread=True,
         )
-        self.app.notify(f"Download di {file.name} in ~/Downloads/")
+        self.app.notify(f"Download di {file.name} in {dest}/")
 
     def action_upload(self) -> None:
         self.app.notify("Upload: inserisci percorso file", timeout=3)
