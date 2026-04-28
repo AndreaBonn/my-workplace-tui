@@ -3,7 +3,7 @@ from pathlib import Path
 from loguru import logger
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Footer, Header, TabbedContent, TabPane
+from textual.widgets import Header, TabbedContent, TabPane
 
 from workspace_tui.auth.jira_auth import create_jira_session
 from workspace_tui.auth.oauth import load_or_create_credentials
@@ -22,6 +22,7 @@ from workspace_tui.ui.tabs.drive_tab import DriveTab
 from workspace_tui.ui.tabs.gmail_tab import GmailTab
 from workspace_tui.ui.tabs.jira_tab import JiraTab
 from workspace_tui.ui.widgets.status_bar import StatusBar
+from workspace_tui.ui.widgets.wrapping_footer import WrappingFooter
 
 MIN_COLUMNS = 120
 MIN_ROWS = 30
@@ -73,7 +74,7 @@ class WorkspaceTUI(App):
                     settings=self.settings,
                 )
         yield StatusBar()
-        yield Footer()
+        yield WrappingFooter()
 
     def on_mount(self) -> None:
         self.run_worker(self._initialize_services, thread=True)
