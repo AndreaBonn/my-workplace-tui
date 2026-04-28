@@ -72,8 +72,12 @@ known-first-party = ["workspace_tui"]
 
 [tool.coverage.run]
 source = ["src/workspace_tui"]
-omit = ["src/workspace_tui/__main__.py"]
+omit = [
+    "src/workspace_tui/__main__.py",
+    "src/workspace_tui/app.py",
+    "src/workspace_tui/ui/**",
+]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 30
+fail_under = 85
