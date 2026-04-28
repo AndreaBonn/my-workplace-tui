@@ -1,3 +1,4 @@
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -9,6 +10,16 @@ from workspace_tui.ui.widgets.compose_modal import ComposeData, ComposeModal
 from workspace_tui.ui.widgets.email_list import EmailListView, EmailSelected
 from workspace_tui.ui.widgets.email_preview import EmailPreview
 
+_FOLDER_ICONS = {
+    "INBOX": "📥",
+    "SENT": "📤",
+    "DRAFT": "📝",
+    "STARRED": "⭐",
+    "IMPORTANT": "⚡",
+    "SPAM": "🚫",
+    "TRASH": "🗑 ",
+}
+
 
 class FolderItem(ListItem):
     def __init__(self, label: GmailLabel, **kwargs) -> None:
@@ -16,8 +27,13 @@ class FolderItem(ListItem):
         self.label = label
 
     def compose(self) -> ComposeResult:
-        unread = f" ({self.label.unread_count})" if self.label.unread_count > 0 else ""
-        yield Static(f"{self.label.name}{unread}")
+        icon = _FOLDER_ICONS.get(self.label.label_id, "📁")
+        line = Text()
+        line.append(f"{icon} ")
+        line.append(self.label.name)
+        if self.label.unread_count > 0:
+            line.append(f" ({self.label.unread_count})", style="bold dodger_blue1")
+        yield Static(line)
 
 
 class GmailTab(Vertical):

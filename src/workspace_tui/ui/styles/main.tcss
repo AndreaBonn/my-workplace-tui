@@ -63,6 +63,24 @@ StatusBar {
     width: 40%;
 }
 
+#email-list > EmailListItem {
+    height: auto;
+    padding: 0;
+    border-bottom: dashed $surface-lighten-2;
+}
+
+#email-list > EmailListItem.unread {
+    background: $surface;
+}
+
+#email-list > EmailListItem:hover {
+    background: $primary 15%;
+}
+
+#email-list > .--highlight {
+    background: $primary 25%;
+}
+
 #preview-headers {
     padding: 1;
     color: $text;
