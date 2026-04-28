@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from googleapiclient.discovery import build
 from loguru import logger
@@ -62,7 +62,7 @@ class CalendarService(BaseService):
         max_results: int = 100,
     ) -> list[CalendarEvent]:
         if time_min is None:
-            time_min = datetime.now()
+            time_min = datetime.now(tz=UTC)
         if time_max is None:
             time_max = time_min + timedelta(days=30)
 
