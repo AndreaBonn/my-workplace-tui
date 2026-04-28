@@ -208,7 +208,56 @@ class CalendarTab(Vertical):
         self._load_events()
 
     def action_create_event(self) -> None:
-        self.app.notify("Creazione evento: funzionalità in arrivo", timeout=3)
+        from workspace_tui.ui.widgets.event_create_modal import EventCreateModal
+
+        self.app.push_screen(
+            EventCreateModal(),
+            callback=self._handle_create_result,
+        )
+
+    def _handle_create_result(self, result: object) -> None:
+        from workspace_tui.ui.widgets.event_create_modal import EventCreateData
+
+        if not isinstance(result, EventCreateData) or not self.calendar_service:
+            return
+
+        # Parse date DD/MM/YYYY → ISO format
+        try:
+            parts = result.date.split("/")
+            iso_date = f"{parts[2]}-{parts[1]}-{parts[0]}"
+        except (IndexError, ValueError):
+            self.app.notify("Formato data non valido (GG/MM/AAAA)", severity="error")
+            return
+
+        if result.all_day:
+            start = iso_date
+            end = iso_date
+        else:
+            start = f"{iso_date}T{result.start_time}:00"
+            end = f"{iso_date}T{result.end_time}:00"
+
+        attendees = [a.strip() for a in result.attendees.split(",") if a.strip()] or None
+
+        def _create() -> None:
+            if not self.calendar_service:
+                return
+            try:
+                self.calendar_service.create_event(
+                    summary=result.summary,
+                    start=start,
+                    end=end,
+                    location=result.location,
+                    description=result.description,
+                    attendees=attendees,
+                )
+                self.app.call_from_thread(
+                    self.app.notify, f"Evento creato: {result.summary}", timeout=3
+                )
+                self.app.call_from_thread(self._load_events)
+            except Exception as exc:
+                self.app.call_from_thread(self.app.notify, f"Errore: {exc}", severity="error")
+
+        self.app.run_worker(_create, thread=True)
 
     def action_delete_event(self) -> None:
         self.app.notify("Seleziona un evento per eliminarlo", severity="warning")
