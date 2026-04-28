@@ -4,7 +4,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
-from textual.widgets import Input, Static
+from textual.widgets import Checkbox, Input, Static
 
 from workspace_tui.config.settings import Settings
 from workspace_tui.services.jira import JiraIssue, JiraService, JiraWorklog
@@ -62,8 +62,11 @@ class JiraTab(Vertical):
                     )
                     yield Static(" Testo:", classes="filter-label")
                     yield Input(placeholder="parola chiave", id="filter-text")
+                    yield Checkbox("Assegnati a me", id="filter-my-issues")
                     yield Static(" Assegnato:", classes="filter-label")
-                    yield Input(placeholder="nome persona", id="filter-assignee")
+                    yield Input(
+                        placeholder="nome persona (ignora se flag attivo)", id="filter-assignee"
+                    )
                     yield Static(" Stato:", classes="filter-label")
                     yield Input(placeholder="es. In corso", id="filter-status")
                     yield Static(" JQL:", classes="filter-label")
@@ -140,6 +143,10 @@ class JiraTab(Vertical):
         detail.issue = issue
         detail.set_worklogs(worklogs)
 
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        if event.checkbox.id == "filter-my-issues":
+            self._execute_filter_search()
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "filter-jql":
             jql = event.value.strip()
@@ -154,6 +161,7 @@ class JiraTab(Vertical):
     def _execute_filter_search(self) -> None:
         project = self.query_one("#filter-project", Input).value.strip()
         text = self.query_one("#filter-text", Input).value.strip()
+        my_issues = self.query_one("#filter-my-issues", Checkbox).value
         assignee = self.query_one("#filter-assignee", Input).value.strip()
         status = self.query_one("#filter-status", Input).value.strip()
 
@@ -166,7 +174,9 @@ class JiraTab(Vertical):
         if text:
             safe_text = text.replace('"', '\\"')
             conditions.append(f'(summary ~ "{safe_text}*" OR description ~ "{safe_text}*")')
-        if assignee:
+        if my_issues:
+            conditions.append("assignee = currentUser()")
+        elif assignee:
             safe_name = assignee.replace('"', '\\"')
             conditions.append(f'assignee = "{safe_name}"')
         if status:
