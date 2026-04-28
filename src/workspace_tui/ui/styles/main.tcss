@@ -113,7 +113,13 @@ StatusBar {
 
 #jira-filters {
     height: auto;
-    max-height: 6;
+    max-height: 12;
+    padding: 0 1;
+}
+
+#jira-filters Input {
+    height: 1;
+    margin: 0;
     padding: 0 1;
 }
 

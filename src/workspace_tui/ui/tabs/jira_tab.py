@@ -53,7 +53,16 @@ class JiraTab(Vertical):
         with Horizontal(id="jira-layout"):
             with Vertical(id="jira-left-panel"):
                 with Vertical(id="jira-filters"):
-                    yield Input(placeholder="Cerca o JQL...", id="jira-search")
+                    yield Static(" Filtri", classes="panel-title")
+                    yield Input(
+                        placeholder="Progetto (es. TAGAIT)",
+                        id="filter-project",
+                        value=self._settings.jira_default_project if self._settings else "",
+                    )
+                    yield Input(placeholder="Testo / parola chiave", id="filter-text")
+                    yield Input(placeholder="Assegnato (nome)", id="filter-assignee")
+                    yield Input(placeholder="Stato (es. In corso)", id="filter-status")
+                    yield Input(placeholder="JQL diretto", id="filter-jql")
                 yield Static("Issue", classes="panel-title")
                 yield IssueListView(id="issue-list")
             with Vertical(id="jira-right-panel"):
@@ -127,54 +136,42 @@ class JiraTab(Vertical):
         detail.set_worklogs(worklogs)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "jira-search":
-            query = event.value.strip()
-            if not query:
-                self._load_default_issues()
-            elif any(kw in query.lower() for kw in ("=", "and", "or", "order by", "~")):
-                self._execute_jql(query)
-            else:
-                jql = self._build_text_search_jql(query)
+        if event.input.id == "filter-jql":
+            jql = event.value.strip()
+            if jql:
                 self._execute_jql(jql)
+            return
 
-    def _build_text_search_jql(self, query: str) -> str:
-        """Build JQL for free-text search with partial matching.
+        if event.input.id in ("filter-project", "filter-text", "filter-assignee", "filter-status"):
+            self._execute_filter_search()
+            return
 
-        Supports:
-        - Partial words: "dashb" matches "dashboard"
-        - Multiple words: "dashboard quicksight" matches both
-        - Project code prefix: "TAGAIT" filters by project
-        - Names: "vincenzo" matches assignee/reporter
-        """
-        import re
+    def _execute_filter_search(self) -> None:
+        project = self.query_one("#filter-project", Input).value.strip()
+        text = self.query_one("#filter-text", Input).value.strip()
+        assignee = self.query_one("#filter-assignee", Input).value.strip()
+        status = self.query_one("#filter-status", Input).value.strip()
 
-        words = query.split()
         conditions = []
 
-        project_pattern = re.compile(r"^[A-Z][A-Z0-9]+$")
-        project_words = [w for w in words if project_pattern.match(w)]
-        search_words = [w for w in words if not project_pattern.match(w)]
-
-        for proj in project_words:
-            conditions.append(f"project = {proj}")
-
-        if not project_words and self._settings and self._settings.jira_default_project:
-            pass
-
-        for word in search_words:
-            safe_word = word.replace('"', '\\"')
-            conditions.append(
-                f'(summary ~ "{safe_word}*" OR description ~ "{safe_word}*"'
-                f' OR assignee = "{safe_word}" OR reporter = "{safe_word}")'
-            )
+        if project:
+            conditions.append(f"project = {project}")
+        if text:
+            safe_text = text.replace('"', '\\"')
+            conditions.append(f'(summary ~ "{safe_text}*" OR description ~ "{safe_text}*")')
+        if assignee:
+            safe_name = assignee.replace('"', '\\"')
+            conditions.append(f'assignee = "{safe_name}"')
+        if status:
+            safe_status = status.replace('"', '\\"')
+            conditions.append(f'status = "{safe_status}"')
 
         if not conditions:
-            safe_query = query.replace('"', '\\"')
-            conditions.append(f'text ~ "{safe_query}*"')
+            self._load_default_issues()
+            return
 
         jql = " AND ".join(conditions) + " ORDER BY updated DESC"
         self._execute_jql(jql)
-        return jql
 
     def action_create_issue(self) -> None:
         if not self.jira_service:
@@ -274,8 +271,7 @@ class JiraTab(Vertical):
         webbrowser.open(url)
 
     def action_search_jql(self) -> None:
-        search_input = self.query_one("#jira-search", Input)
-        search_input.focus()
+        self.query_one("#filter-project", Input).focus()
 
     def _apply_saved_jql(self, index: int) -> None:
         if not self._settings:
