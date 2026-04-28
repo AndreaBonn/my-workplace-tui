@@ -267,7 +267,8 @@ class GmailService(BaseService):
         self, message_id: str, attachment: EmailAttachment, dest_dir: Path
     ) -> Path:
         data = self.get_attachment(message_id, attachment.attachment_id)
-        dest_path = dest_dir / attachment.filename
+        safe_name = Path(attachment.filename).name
+        dest_path = dest_dir / safe_name
         dest_path.write_bytes(data)
         logger.info("Attachment saved to {}", dest_path)
         return dest_path

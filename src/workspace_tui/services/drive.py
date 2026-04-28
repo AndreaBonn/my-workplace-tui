@@ -61,7 +61,8 @@ class DriveService(BaseService):
                 q_parts.append(f"'{folder_id}' in parents")
             q_parts.append("trashed = false")
             if query:
-                q_parts.append(f"name contains '{query}'")
+                sanitized_query = query.replace("\\", "\\\\").replace("'", "\\'")
+                q_parts.append(f"name contains '{sanitized_query}'")
             q = " and ".join(q_parts)
 
             params = {
@@ -140,7 +141,8 @@ class DriveService(BaseService):
 
     def download_file(self, file_id: str, dest_dir: Path, filename: str) -> Path:
         metadata = self.get_file_metadata(file_id)
-        dest_path = dest_dir / filename
+        safe_name = Path(filename).name
+        dest_path = dest_dir / safe_name
 
         if metadata.mime_type in EXPORT_FORMATS:
             export_mime, ext = EXPORT_FORMATS[metadata.mime_type]

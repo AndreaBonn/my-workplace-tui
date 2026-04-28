@@ -38,6 +38,11 @@ def create_jira_session(
         )
 
     base_url = base_url.rstrip("/")
+    if not base_url.startswith("https://"):
+        logger.warning(
+            "Jira base URL does not use HTTPS — credentials may be transmitted in cleartext"
+        )
+
     token = b64encode(f"{username}:{api_token}".encode()).decode()
 
     session = requests.Session()

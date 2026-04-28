@@ -92,4 +92,5 @@ def refresh_credentials(creds: Credentials) -> Credentials:
 def _save_token(creds: Credentials, token_path: Path) -> None:
     token_path.parent.mkdir(parents=True, exist_ok=True)
     token_path.write_text(creds.to_json())
+    token_path.chmod(0o600)
     logger.debug("Token saved to {}", token_path)
