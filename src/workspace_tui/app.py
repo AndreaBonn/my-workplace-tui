@@ -47,7 +47,10 @@ class WorkspaceTUI(App):
             with TabPane("[4] Drive", id="drive"):
                 yield DriveTab()
             with TabPane("[5] Jira", id="jira"):
-                yield JiraTab(enabled=self.settings.jira_configured)
+                yield JiraTab(
+                    enabled=self.settings.jira_configured,
+                    settings=self.settings,
+                )
         yield StatusBar()
         yield Footer()
 
