@@ -180,6 +180,84 @@ class TestGetAttachment:
         assert result == b"file content"
 
 
+class TestToggleStar:
+    def test_unstar_message(self, gmail_service, mock_gmail_api):
+        mock_gmail_api.users().messages().modify().execute.return_value = {}
+        gmail_service.toggle_star("msg1", is_starred=True)
+
+    def test_star_message(self, gmail_service, mock_gmail_api):
+        mock_gmail_api.users().messages().modify().execute.return_value = {}
+        gmail_service.toggle_star("msg1", is_starred=False)
+
+
+class TestArchiveMessage:
+    def test_archives_by_removing_inbox_label(self, gmail_service, mock_gmail_api):
+        mock_gmail_api.users().messages().modify().execute.return_value = {}
+        gmail_service.archive_message("msg1")
+
+
+class TestGetThreadMessages:
+    def test_returns_thread_messages(self, gmail_service, mock_gmail_api):
+        msg_data = _make_message_response(msg_id="msg1", body_text="Thread msg 1")
+        mock_gmail_api.users().threads().get().execute.return_value = {"messages": [msg_data]}
+        messages = gmail_service.get_thread_messages("thread1")
+        assert len(messages) == 1
+        assert messages[0].body_text == "Thread msg 1"
+
+    def test_handles_parse_error_gracefully(self, gmail_service, mock_gmail_api):
+        mock_gmail_api.users().threads().get().execute.return_value = {
+            "messages": [{"malformed": True}]
+        }
+        messages = gmail_service.get_thread_messages("thread1")
+        assert messages == []
+
+
+class TestDownloadAttachment:
+    def test_saves_attachment_to_disk(self, gmail_service, mock_gmail_api, tmp_path):
+        from workspace_tui.services.gmail import EmailAttachment
+
+        raw_data = base64.urlsafe_b64encode(b"attachment data").decode()
+        mock_gmail_api.users().messages().attachments().get().execute.return_value = {
+            "data": raw_data
+        }
+
+        attachment = EmailAttachment(
+            attachment_id="att1",
+            filename="report.pdf",
+            mime_type="application/pdf",
+            size=100,
+        )
+        path = gmail_service.download_attachment("msg1", attachment, tmp_path)
+        assert path.exists()
+        assert path.read_bytes() == b"attachment data"
+        assert path.name == "report.pdf"
+
+
+class TestSendMessageWithReply:
+    def test_sends_reply_with_reply_to_id(self, gmail_service, mock_gmail_api):
+        mock_gmail_api.users().messages().send().execute.return_value = {"id": "reply1"}
+        result = gmail_service.send_message(
+            to="recipient@test.com",
+            subject="Re: Test",
+            body="My reply",
+            reply_to_id="<original-msg-id@mail.com>",
+            thread_id="thread1",
+        )
+        assert result == "reply1"
+
+
+class TestCreateDraftWithCc:
+    def test_creates_draft_with_cc(self, gmail_service, mock_gmail_api):
+        mock_gmail_api.users().drafts().create().execute.return_value = {"id": "draft2"}
+        result = gmail_service.create_draft(
+            to="recipient@test.com",
+            subject="Draft with CC",
+            body="Body",
+            cc="cc@test.com",
+        )
+        assert result == "draft2"
+
+
 class TestParseMessage:
     def test_multipart_message(self, gmail_service):
         html_body = base64.urlsafe_b64encode(b"<p>Hello</p>").decode()

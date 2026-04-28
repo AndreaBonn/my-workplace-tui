@@ -56,3 +56,14 @@ class TestCreateJiraSession:
         )
         auth_header = session.headers["Authorization"]
         assert "supersecret" not in auth_header
+
+    def test_warns_on_non_https_url(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="workspace_tui.auth.jira_auth"):
+            session = create_jira_session(
+                username="user@test.com",
+                api_token="test-token",
+                base_url="http://test.atlassian.net",
+            )
+        assert session.base_url == "http://test.atlassian.net"

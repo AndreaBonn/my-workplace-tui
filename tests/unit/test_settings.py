@@ -57,3 +57,15 @@ class TestSettings:
         s = Settings()
         assert isinstance(s.google_client_secret_path, Path)
         assert isinstance(s.google_token_path, Path)
+
+    def test_drive_download_dir_expanded(self):
+        s = Settings(drive_download_dir="~/Downloads")
+        assert "~" not in str(s.drive_download_dir)
+
+
+class TestLoadSettings:
+    def test_returns_settings_instance(self):
+        from workspace_tui.config.settings import load_settings
+
+        s = load_settings()
+        assert isinstance(s, Settings)

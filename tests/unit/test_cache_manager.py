@@ -64,3 +64,19 @@ class TestCacheManager:
     def test_clear_noop_when_disabled(self):
         cache = CacheManager(enabled=False)
         cache.clear()
+
+    def test_invalidate_prefix_no_matching_keys(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = CacheManager(enabled=True, base_dir=tmpdir)
+            cache.set(key="jira:issues", value="data", ttl=300)
+            cache.invalidate_prefix("gmail:")
+            assert cache.get("jira:issues") == "data"
+            cache.close()
+
+    def test_close_when_disabled(self):
+        cache = CacheManager(enabled=False)
+        cache.close()
+
+    def test_invalidate_prefix_noop_when_disabled(self):
+        cache = CacheManager(enabled=False)
+        cache.invalidate_prefix("any:")

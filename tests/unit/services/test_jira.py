@@ -199,6 +199,60 @@ class TestGetPriorities:
         assert len(priorities) == 2
 
 
+class TestGetMyself:
+    def test_returns_user_info(self, jira_service, mock_session):
+        mock_session.request.return_value = _mock_response(
+            {"accountId": "abc123", "displayName": "Mario Rossi"}
+        )
+        result = jira_service.get_myself()
+        assert result["displayName"] == "Mario Rossi"
+
+
+class TestGetIssueTypes:
+    def test_returns_issue_types(self, jira_service, mock_session):
+        mock_session.request.return_value = _mock_response(
+            [{"id": "1", "name": "Task"}, {"id": "2", "name": "Bug"}]
+        )
+        types = jira_service.get_issue_types()
+        assert len(types) == 2
+
+
+class TestSearchUsers:
+    def test_returns_users(self, jira_service, mock_session):
+        mock_session.request.return_value = _mock_response(
+            [{"accountId": "u1", "displayName": "Mario"}]
+        )
+        users = jira_service.search_users(query="Mario")
+        assert len(users) == 1
+
+
+class TestUpdateIssueOptions:
+    def test_updates_priority(self, jira_service, mock_session):
+        mock_session.request.return_value = _mock_response({}, status_code=204)
+        jira_service.update_issue("PROJ-1", priority="High")
+
+    def test_updates_assignee(self, jira_service, mock_session):
+        mock_session.request.return_value = _mock_response({}, status_code=204)
+        jira_service.update_issue("PROJ-1", assignee_id="account-abc")
+
+
+class TestAddWorklogWithoutComment:
+    def test_adds_worklog_without_comment(self, jira_service, mock_session):
+        mock_session.request.return_value = _mock_response({}, status_code=201)
+        jira_service.add_worklog(
+            issue_key="PROJ-1",
+            time_spent_seconds=3600,
+            started="2026-04-28T09:00:00.000+0000",
+        )
+
+
+class TestListProjects:
+    def test_returns_projects(self, jira_service, mock_session):
+        mock_session.request.return_value = _mock_response([{"key": "PROJ", "name": "Project"}])
+        projects = jira_service.list_projects()
+        assert len(projects) == 1
+
+
 class TestParseIssue:
     def test_handles_null_assignee(self, jira_service):
         data = _make_issue_data()

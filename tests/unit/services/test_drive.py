@@ -146,6 +146,57 @@ class TestListSharedDrives:
         assert drives == []
 
 
+class TestListFilesWithOptions:
+    def test_list_files_with_query(self, drive_service, mock_api):
+        mock_api.files().list().execute.return_value = {
+            "files": [{"id": "f1", "name": "Found.txt", "mimeType": "text/plain"}]
+        }
+        files, _ = drive_service.list_files(query="Found")
+        assert len(files) == 1
+
+    def test_list_files_with_page_token(self, drive_service, mock_api):
+        mock_api.files().list().execute.return_value = {
+            "files": [{"id": "f2", "name": "Page2.txt", "mimeType": "text/plain"}],
+            "nextPageToken": "next123",
+        }
+        files, next_token = drive_service.list_files(page_token="token1")
+        assert len(files) == 1
+        assert next_token == "next123"
+
+
+class TestDownloadFile:
+    def test_downloads_regular_file(self, drive_service, mock_api, tmp_path):
+        mock_api.files().get().execute.return_value = {
+            "id": "f1",
+            "name": "report.pdf",
+            "mimeType": "application/pdf",
+        }
+        mock_api.files().get_media().execute.return_value = b"PDF content"
+        path = drive_service.download_file(file_id="f1", dest_dir=tmp_path, filename="report.pdf")
+        assert path.exists()
+        assert path.read_bytes() == b"PDF content"
+
+    def test_downloads_google_doc_as_txt(self, drive_service, mock_api, tmp_path):
+        mock_api.files().get().execute.return_value = {
+            "id": "doc1",
+            "name": "My Doc",
+            "mimeType": "application/vnd.google-apps.document",
+        }
+        mock_api.files().export().execute.return_value = b"Plain text content"
+        path = drive_service.download_file(file_id="doc1", dest_dir=tmp_path, filename="mydoc")
+        assert path.suffix == ".txt"
+        assert path.read_bytes() == b"Plain text content"
+
+
+class TestUploadFile:
+    def test_uploads_file(self, drive_service, mock_api, tmp_path):
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("hello")
+        mock_api.files().create().execute.return_value = {"id": "uploaded1"}
+        result = drive_service.upload_file(local_path=test_file, folder_id="root")
+        assert result == "uploaded1"
+
+
 class TestSearchFiles:
     def test_search_by_name(self, drive_service, mock_api):
         mock_api.files().list().execute.return_value = {
