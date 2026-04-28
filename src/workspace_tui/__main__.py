@@ -50,6 +50,9 @@ def main() -> None:
         print(f"Errore configurazione: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    sys.stdout.write("\033]2;Workspace TUI\007")
+    sys.stdout.flush()
+
     app = WorkspaceTUI(settings=settings)
     app.run()
 
