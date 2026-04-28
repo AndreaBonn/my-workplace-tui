@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta
 
 from dateutil import parser as dateutil_parser
@@ -59,8 +60,6 @@ def parse_jira_duration(duration_str: str) -> int | None:
     duration_str = duration_str.strip().lower()
     total_seconds = 0
     found = False
-
-    import re
 
     for match in re.finditer(r"(\d+)\s*(d|h|m)", duration_str):
         found = True

@@ -31,6 +31,9 @@ class CalendarTab(Vertical):
         self.calendar_service = service
         self._load_events()
 
+    def reload(self) -> None:
+        self._load_events()
+
     def _load_events(self) -> None:
         if not self.calendar_service:
             return

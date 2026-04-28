@@ -7,13 +7,6 @@ from textual.widgets import ListItem, ListView, Static
 from workspace_tui.services.jira import JiraIssue
 from workspace_tui.utils.text_utils import truncate
 
-STATUS_COLORS = {
-    "To Do": "grey",
-    "In Progress": "blue",
-    "In Review": "purple",
-    "Done": "green",
-}
-
 
 class IssueSelected(Message):
     def __init__(self, issue: JiraIssue) -> None:

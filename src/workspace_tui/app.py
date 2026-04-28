@@ -159,14 +159,14 @@ class WorkspaceTUI(App):
             self.query_one(GmailTab).load_labels()
         elif active == "calendar" and self._calendar_service:
             self._cache.invalidate_prefix("calendar:")
-            self.query_one(CalendarTab)._load_events()
+            self.query_one(CalendarTab).reload()
         elif active == "drive" and self._drive_service:
             self._cache.invalidate_prefix("drive:")
-            self.query_one(DriveTab)._load_files()
+            self.query_one(DriveTab).reload()
         elif active == "chat" and self._chat_service:
             self._cache.invalidate_prefix("chat:")
-            self.query_one(ChatTab)._load_spaces()
+            self.query_one(ChatTab).reload()
         elif active == "jira" and self._jira_service:
             self._cache.invalidate_prefix("jira:")
-            self.query_one(JiraTab)._load_default_issues()
+            self.query_one(JiraTab).reload()
         self.notify("Ricarica dati...", timeout=2)

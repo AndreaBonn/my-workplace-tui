@@ -48,6 +48,9 @@ class ChatTab(Vertical):
         self.chat_service = service
         self._load_spaces()
 
+    def reload(self) -> None:
+        self._load_spaces()
+
     def _load_spaces(self) -> None:
         if not self.chat_service:
             return
@@ -65,8 +68,11 @@ class ChatTab(Vertical):
             space_list.clear()
             for space in dm_spaces + group_spaces:
                 space_list.append(SpaceItem(space=space))
-        except Exception:
+        except Exception as exc:
             self.chat_available = False
+            from loguru import logger
+
+            logger.warning("Chat API unavailable: {}", exc)
             messages_widget = self.query_one("#chat-messages", Static)
             messages_widget.update(CHAT_UNAVAILABLE_MESSAGE)
 

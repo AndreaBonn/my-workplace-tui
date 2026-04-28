@@ -56,6 +56,9 @@ class DriveTab(Vertical):
         self.drive_service = service
         self._load_files()
 
+    def reload(self) -> None:
+        self._load_files()
+
     def _load_files(self, folder_id: str = "root") -> None:
         self.current_folder = folder_id
         if not self.drive_service:

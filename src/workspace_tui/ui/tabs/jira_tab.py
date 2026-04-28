@@ -76,6 +76,9 @@ class JiraTab(Vertical):
         self.jira_service = service
         self._load_default_issues()
 
+    def reload(self) -> None:
+        self._load_default_issues()
+
     def _load_default_issues(self) -> None:
         if not self.jira_service or not self._settings:
             return
