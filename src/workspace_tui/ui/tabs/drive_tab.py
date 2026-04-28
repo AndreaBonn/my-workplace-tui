@@ -20,54 +20,17 @@ class FileItem(ListItem):
         yield Static(f"{self.file.icon} {self.file.name}{size_str}")
 
 
-class DriveFileList(ListView):
+class DriveTab(Vertical):
     BINDINGS = [
-        Binding("j", "cursor_down", "Giù", show=True),
-        Binding("k", "cursor_up", "Su", show=True),
-        Binding("enter", "select_cursor", "Apri", show=True),
-        Binding("backspace", "go_up", "Indietro", show=True),
+        Binding("o", "open_selected", "Apri", show=True),
+        Binding("b", "go_up", "Indietro", show=True),
         Binding("d", "download", "Scarica", show=True),
+        Binding("u", "upload", "Carica", show=True),
         Binding("R", "view_recent", "Recenti", show=True),
         Binding("S", "view_shared", "Condivisi", show=True),
         Binding("M", "view_root", "Il mio Drive", show=True),
-        Binding("slash", "search_drive", "Cerca", show=True),
     ]
 
-    def action_go_up(self) -> None:
-        for ancestor in self.ancestors_with_self:
-            if isinstance(ancestor, DriveTab):
-                ancestor.go_up()
-                return
-
-    def action_download(self) -> None:
-        for ancestor in self.ancestors_with_self:
-            if isinstance(ancestor, DriveTab):
-                ancestor.download_selected()
-                return
-
-    def action_view_recent(self) -> None:
-        for ancestor in self.ancestors_with_self:
-            if isinstance(ancestor, DriveTab):
-                ancestor.view_recent()
-                return
-
-    def action_view_shared(self) -> None:
-        for ancestor in self.ancestors_with_self:
-            if isinstance(ancestor, DriveTab):
-                ancestor.view_shared()
-                return
-
-    def action_view_root(self) -> None:
-        for ancestor in self.ancestors_with_self:
-            if isinstance(ancestor, DriveTab):
-                ancestor.view_root()
-                return
-
-    def action_search_drive(self) -> None:
-        self.app.notify("Ricerca Drive: funzionalità in arrivo", timeout=3)
-
-
-class DriveTab(Vertical):
     drive_service: reactive[DriveService | None] = reactive(None, init=False)
     current_folder: reactive[str] = reactive("root")
     folder_stack: reactive[list[str]] = reactive(list, init=False)
@@ -77,7 +40,7 @@ class DriveTab(Vertical):
         with Horizontal(id="drive-layout"):
             with Vertical(id="drive-browser"):
                 yield Static("Il mio Drive", id="drive-breadcrumb", classes="panel-title")
-                yield DriveFileList(id="drive-file-list")
+                yield ListView(id="drive-file-list")
             with Vertical(id="drive-detail"):
                 yield Static("Seleziona un file", id="drive-file-detail", markup=False)
 
@@ -101,7 +64,7 @@ class DriveTab(Vertical):
         self.app.call_from_thread(self._update_file_list, files)
 
     def _update_file_list(self, files: list[DriveFile]) -> None:
-        file_list = self.query_one("#drive-file-list", DriveFileList)
+        file_list = self.query_one("#drive-file-list", ListView)
         file_list.clear()
         for f in files:
             file_list.append(FileItem(file=f))
@@ -129,10 +92,17 @@ class DriveTab(Vertical):
             f"Dim.:    {size_str}\n"
             f"Modif.:  {file.modified_time}\n"
             f"Prop.:   {file.owner}\n\n"
-            f"[Enter] Apri  [d] Download  [Backspace] Indietro"
+            f"[o] Apri  [d] Download  [b] Indietro\n"
+            f"[R] Recenti  [S] Condivisi  [M] Root"
         )
 
-    def go_up(self) -> None:
+    def action_open_selected(self) -> None:
+        if self.selected_file and self.selected_file.is_folder:
+            self.folder_stack = [*self.folder_stack, self.current_folder]
+            self._load_files(self.selected_file.file_id)
+            self.query_one("#drive-breadcrumb", Static).update(self.selected_file.name)
+
+    def action_go_up(self) -> None:
         if self.folder_stack:
             parent = self.folder_stack[-1]
             self.folder_stack = self.folder_stack[:-1]
@@ -140,8 +110,10 @@ class DriveTab(Vertical):
             self.query_one("#drive-breadcrumb", Static).update(
                 "Il mio Drive" if not self.folder_stack else ""
             )
+        else:
+            self.app.notify("Già nella root", timeout=2)
 
-    def download_selected(self) -> None:
+    def action_download(self) -> None:
         if not self.selected_file or not self.drive_service:
             self.app.notify("Seleziona un file", severity="warning")
             return
@@ -161,7 +133,10 @@ class DriveTab(Vertical):
         )
         self.app.notify(f"Download di {file.name} in ~/Downloads/")
 
-    def view_recent(self) -> None:
+    def action_upload(self) -> None:
+        self.app.notify("Upload: inserisci percorso file", timeout=3)
+
+    def action_view_recent(self) -> None:
         if not self.drive_service:
             return
         self.app.run_worker(self._load_recent_worker, thread=True)
@@ -173,7 +148,7 @@ class DriveTab(Vertical):
         self.app.call_from_thread(self._update_file_list, files)
         self.app.call_from_thread(self.query_one("#drive-breadcrumb", Static).update, "Recenti")
 
-    def view_shared(self) -> None:
+    def action_view_shared(self) -> None:
         if not self.drive_service:
             return
         self.app.run_worker(self._load_shared_worker, thread=True)
@@ -187,7 +162,7 @@ class DriveTab(Vertical):
             self.query_one("#drive-breadcrumb", Static).update, "Condivisi con me"
         )
 
-    def view_root(self) -> None:
+    def action_view_root(self) -> None:
         self.folder_stack = []
         self._load_files("root")
         self.query_one("#drive-breadcrumb", Static).update("Il mio Drive")
