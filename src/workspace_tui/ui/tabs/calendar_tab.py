@@ -259,8 +259,50 @@ class CalendarTab(Vertical):
 
         self.app.run_worker(_create, thread=True)
 
+    _pending_delete: CalendarEvent | None = None
+
     def action_delete_event(self) -> None:
-        self.app.notify("Seleziona un evento per eliminarlo", severity="warning")
+        # Seconda pressione entro 5s = conferma eliminazione
+        if self._pending_delete is not None:
+            self._do_delete(self._pending_delete)
+            self._pending_delete = None
+            return
+
+        ev = self._selected_event
+        if not ev:
+            self.app.notify("Seleziona un evento per eliminarlo", severity="warning")
+            return
+
+        self._pending_delete = ev
+        self.app.notify(
+            f"Eliminare '{ev.summary}'? Premi [bold]d[/] di nuovo per confermare.",
+            title="Conferma eliminazione",
+            severity="warning",
+            timeout=5,
+        )
+        self.set_timer(delay=5.0, callback=self._reset_pending_delete)
+
+    def _reset_pending_delete(self) -> None:
+        self._pending_delete = None
+
+    def _do_delete(self, ev: CalendarEvent) -> None:
+        if not self.calendar_service:
+            return
+        service = self.calendar_service
+        summary = ev.summary
+
+        def _delete() -> None:
+            try:
+                service.delete_event(
+                    event_id=ev.event_id,
+                    calendar_id=ev.calendar_id or "primary",
+                )
+                self.app.call_from_thread(self.app.notify, f"Eliminato: {summary}", timeout=3)
+                self.app.call_from_thread(self._load_events)
+            except Exception as exc:
+                self.app.call_from_thread(self.app.notify, f"Errore: {exc}", severity="error")
+
+        self.app.run_worker(_delete, thread=True)
 
     def action_toggle_view(self) -> None:
         views = ["agenda", "settimana", "mese"]
