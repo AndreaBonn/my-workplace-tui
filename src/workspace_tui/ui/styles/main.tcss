@@ -96,6 +96,11 @@ StatusBar {
     color: $text-muted;
 }
 
+.thread-message {
+    padding: 0 1;
+    margin: 0;
+}
+
 #compose-container {
     width: 80%;
     height: 80%;

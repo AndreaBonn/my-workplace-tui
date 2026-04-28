@@ -10,6 +10,34 @@ _converter.unicode_snob = True
 
 JIRA_KEY_PATTERN = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
 
+_QUOTE_MARKER_PATTERN = re.compile(
+    r"^(On .+ wrote:|Il giorno .+ ha scritto:|"
+    r"---+ ?(Original Message|Messaggio originale|Messaggio inoltrato) ?---+)",
+    re.IGNORECASE,
+)
+
+
+def strip_quoted_text(text: str) -> str:
+    """Remove quoted replies from email body, keeping only original content."""
+    if not text:
+        return ""
+    lines = text.splitlines()
+    result: list[str] = []
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith(">"):
+            # Check if previous non-empty line is a quote marker — trim from marker
+            if result and _QUOTE_MARKER_PATTERN.search(result[-1].strip()):
+                result.pop()
+            break
+        if _QUOTE_MARKER_PATTERN.search(stripped):
+            # Look ahead: if next non-empty lines start with >, this is the quote start
+            remaining = [ln.strip() for ln in lines[i + 1 :] if ln.strip()]
+            if remaining and remaining[0].startswith(">"):
+                break
+        result.append(line)
+    return "\n".join(result).rstrip()
+
 
 def html_to_text(html_content: str) -> str:
     if not html_content:

@@ -5,7 +5,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from workspace_tui.services.gmail import EmailMessage
-from workspace_tui.utils.text_utils import format_size, html_to_text
+from workspace_tui.utils.text_utils import format_size, html_to_text, strip_quoted_text
 
 
 class EmailPreview(VerticalScroll):
@@ -61,11 +61,9 @@ class EmailPreview(VerticalScroll):
         self._render_thread(messages)
 
     def _render_thread(self, messages: list[EmailMessage]) -> None:
-        # Remove existing dynamic thread widgets
         for widget in self.query(".thread-message"):
             widget.remove()
 
-        # Hide single-message widgets
         self.query_one("#preview-headers", Static).update("")
         self.query_one("#preview-body", Static).update("")
         self.query_one("#preview-attachments", Static).update("")
@@ -74,39 +72,62 @@ class EmailPreview(VerticalScroll):
             self.query_one("#preview-body", Static).update("Thread vuoto")
             return
 
-        # Build full thread content as a single Text block for headers
-        # and a single string for bodies — mount Static per message
         for i, msg in enumerate(messages):
             content = self._format_thread_message(msg, index=i, total=len(messages))
-            widget = Static(content, classes="thread-message", markup=False)
+            widget = Static(content, classes="thread-message")
             self.mount(widget)
 
-        # Scroll to bottom after mount completes
         self.call_after_refresh(self.scroll_end, animate=False)
 
-    def _format_thread_message(self, msg: EmailMessage, index: int, total: int) -> str:
+    def _format_thread_message(self, msg: EmailMessage, index: int, total: int) -> Text:
         h = msg.header
-        separator = f"{'─' * 60}\n" if index > 0 else ""
-        header_block = f"{separator}[{index + 1}/{total}] Da: {h.from_address}\nData: {h.date}\n"
-        if h.to_address:
-            header_block += f"A: {h.to_address}\n"
-        if h.cc_address:
-            header_block += f"CC: {h.cc_address}\n"
+        text = Text()
 
+        # Separator between messages
+        if index > 0:
+            text.append(f"{'─' * 60}\n", style="dim")
+
+        # Message counter + sender
+        text.append(f"[{index + 1}/{total}] ", style="bold cyan")
+        text.append(f"{h.from_address}\n", style="bold")
+
+        # Date
+        text.append("  📅 ", style="dim")
+        text.append(f"{h.date}\n", style="dim")
+
+        # Recipients (compact)
+        if h.to_address:
+            text.append("  → ", style="dim")
+            text.append(f"{h.to_address}\n", style="dim")
+        if h.cc_address:
+            text.append("  CC: ", style="dim")
+            text.append(f"{h.cc_address}\n", style="dim")
+
+        text.append("\n")
+
+        # Body — strip quoted text since previous messages are shown above
         body = msg.body_text
         if not body and msg.body_html:
             body = html_to_text(msg.body_html)
         if not body:
             body = msg.snippet or "(nessun contenuto)"
 
-        att_block = ""
-        if msg.attachments:
-            att_names = ", ".join(
-                f"📎 {a.filename} ({format_size(a.size)})" for a in msg.attachments
-            )
-            att_block = f"\nAllegati: {att_names}\n"
+        # Strip quotes for all messages except the first (oldest)
+        if index > 0:
+            body = strip_quoted_text(body)
+            if not body.strip():
+                body = "(solo testo quotato)"
 
-        return f"{header_block}\n{body}{att_block}\n"
+        text.append(body)
+        text.append("\n")
+
+        # Attachments
+        if msg.attachments:
+            text.append("\n")
+            for att in msg.attachments:
+                text.append(f"  📎 {att.filename} ({format_size(att.size)})\n", style="italic")
+
+        return text
 
     def clear_thread(self) -> None:
         """Remove thread view and restore single-message mode."""

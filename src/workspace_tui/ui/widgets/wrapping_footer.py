@@ -9,7 +9,7 @@ class WrappingFooter(Widget):
     WrappingFooter {
         dock: bottom;
         height: auto;
-        max-height: 4;
+        max-height: 5;
         background: $footer-background;
         color: $footer-foreground;
     }
@@ -17,7 +17,10 @@ class WrappingFooter(Widget):
 
     def render(self) -> Text:
         bindings = self.app.active_bindings
-        text = Text(no_wrap=False, overflow="fold")
+        width = self.size.width or 80
+
+        text = Text()
+        current_line_len = 0
 
         first = True
         for _key, active_binding in bindings.items():
@@ -25,13 +28,26 @@ class WrappingFooter(Widget):
             if not binding.show:
                 continue
 
-            if not first:
-                text.append("  ")
-            first = False
+            key_display = binding.key_display or binding.key
+            gap = "  " if not first else ""
+            segment = f"{gap} {key_display}  {binding.description} "
+            segment_len = len(segment)
 
-            key_display = binding.key_display or active_binding.binding.key
+            # Wrap to next line if segment doesn't fit
+            if current_line_len > 0 and current_line_len + segment_len > width:
+                text.append("\n")
+                current_line_len = 0
+                gap = ""
+                segment = f" {key_display}  {binding.description} "
+                segment_len = len(segment)
+
+            if gap:
+                text.append(gap)
+
             text.append(f" {key_display} ", style="bold reverse")
             text.append(f" {binding.description} ")
+            current_line_len += segment_len
+            first = False
 
         return text
 
@@ -40,4 +56,7 @@ class WrappingFooter(Widget):
         self.watch(self.app, "focused", self._bindings_changed)
 
     def _bindings_changed(self, *_args: object) -> None:
+        self.refresh()
+
+    def _on_resize(self) -> None:
         self.refresh()
