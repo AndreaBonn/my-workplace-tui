@@ -44,6 +44,39 @@ def format_datetime_short(dt: datetime) -> str:
     return dt.strftime("%d/%m/%Y %H:%M")
 
 
+GIORNI_IT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+MESI_IT = [
+    "",
+    "Gen",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Mag",
+    "Giu",
+    "Lug",
+    "Ago",
+    "Set",
+    "Ott",
+    "Nov",
+    "Dic",
+]
+
+
+def format_day_header(dt: datetime) -> str:
+    """Format date as Italian day header: 'Mar 29 Apr'."""
+    giorno = GIORNI_IT[dt.weekday()]
+    mese = MESI_IT[dt.month]
+    return f"{giorno} {dt.day} {mese}"
+
+
+def is_today(dt: datetime) -> bool:
+    return dt.date() == datetime.now(tz=dt.tzinfo).date()
+
+
+def is_tomorrow(dt: datetime) -> bool:
+    return dt.date() == (datetime.now(tz=dt.tzinfo) + timedelta(days=1)).date()
+
+
 def format_date_short(dt: datetime) -> str:
     return dt.strftime("%d/%m/%Y")
 

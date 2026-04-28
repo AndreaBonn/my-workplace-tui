@@ -1,3 +1,5 @@
+from itertools import groupby
+
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
@@ -5,7 +7,30 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from workspace_tui.services.calendar import CalendarEvent, CalendarService
-from workspace_tui.utils.date_utils import format_datetime_short, parse_date
+from workspace_tui.utils.date_utils import (
+    format_day_header,
+    format_time,
+    is_today,
+    is_tomorrow,
+    parse_date,
+)
+
+LINE_W = 60
+
+
+def _attendee_name(email: str) -> str:
+    """Extract readable name from email: 'mario.rossi@x.it' → 'Mario Rossi'."""
+    local = email.split("@")[0]
+    return local.replace(".", " ").replace("_", " ").title()
+
+
+def _day_label(dt) -> str:
+    header = format_day_header(dt)
+    if is_today(dt):
+        return f"{header}  (OGGI)"
+    if is_tomorrow(dt):
+        return f"{header}  (DOMANI)"
+    return header
 
 
 class CalendarTab(Vertical):
@@ -52,16 +77,47 @@ class CalendarTab(Vertical):
             events_widget.update("Nessun evento nei prossimi 30 giorni")
             return
 
-        lines = []
-        for event in events:
-            dt = parse_date(event.start)
-            time_str = format_datetime_short(dt) if dt else event.start
-            location = f" 📍 {event.location}" if event.location else ""
-            meet = " 🔗 Meet" if event.meet_link else ""
-            lines.append(f"  {time_str}  {event.summary}{location}{meet}")
-            if event.attendees:
-                lines.append(f"    Partecipanti: {', '.join(event.attendees[:3])}")
-            lines.append("")
+        def _event_date(ev: CalendarEvent) -> str:
+            dt = parse_date(ev.start)
+            return dt.strftime("%Y-%m-%d") if dt else ""
+
+        lines: list[str] = []
+        for day_key, day_events in groupby(events, key=_event_date):
+            day_list = list(day_events)
+            dt_day = parse_date(day_list[0].start)
+            if not dt_day:
+                continue
+
+            # Header giorno
+            label = _day_label(dt_day)
+            lines.append(f"[bold cyan]{'─' * 3} {label} {'─' * (LINE_W - len(label) - 5)}[/]")
+
+            # Prima eventi all-day
+            for ev in day_list:
+                if ev.all_day:
+                    lines.append(f"  [bold yellow]▪ TUTTO IL GIORNO[/]  [bold]{ev.summary}[/]")
+
+            # Poi eventi con orario
+            for ev in day_list:
+                if ev.all_day:
+                    continue
+                dt = parse_date(ev.start)
+                time_str = format_time(dt) if dt else "??:??"
+                # Badges: location e meet
+                badges = ""
+                if ev.location:
+                    badges += f"  [dim]📍 {ev.location}[/]"
+                if ev.meet_link:
+                    badges += "  [green]🔗 Meet[/]"
+                lines.append(f"  [bold cyan]{time_str}[/]  [bold]{ev.summary}[/]{badges}")
+                # Partecipanti come nomi leggibili
+                if ev.attendees:
+                    names = ", ".join(_attendee_name(a) for a in ev.attendees[:4])
+                    if len(ev.attendees) > 4:
+                        names += f" +{len(ev.attendees) - 4}"
+                    lines.append(f"         [dim]👥 {names}[/]")
+
+            lines.append("")  # Riga vuota tra giorni
 
         events_widget.update("\n".join(lines))
 
