@@ -83,13 +83,16 @@ class GmailService(BaseService):
                 name = self.SYSTEM_LABELS.get(label_id, label_data.get("name", label_id))
                 label_type = label_data.get("type", "user")
 
-                detail = self._retry(
-                    lambda lid=label_id: (
-                        self._service.users().labels().get(userId="me", id=lid).execute()
+                unread = 0
+                total = 0
+                if label_id in self.SYSTEM_LABELS:
+                    detail = self._retry(
+                        lambda lid=label_id: (
+                            self._service.users().labels().get(userId="me", id=lid).execute()
+                        )
                     )
-                )
-                unread = detail.get("messagesUnread", 0)
-                total = detail.get("messagesTotal", 0)
+                    unread = detail.get("messagesUnread", 0)
+                    total = detail.get("messagesTotal", 0)
 
                 labels.append(
                     GmailLabel(
