@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     jira_account_id: str = ""
     jira_poll_interval: int = 120
     jira_max_results: int = 50
+    jira_allow_http: bool = False
 
     # Saved JQL filters (accessed via F1-F9)
     jira_saved_jql_1: str = ""
