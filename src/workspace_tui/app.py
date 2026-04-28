@@ -24,7 +24,7 @@ from workspace_tui.ui.tabs.jira_tab import JiraTab
 from workspace_tui.ui.widgets.status_bar import StatusBar
 
 MIN_COLUMNS = 120
-MIN_ROWS = 40
+MIN_ROWS = 30
 
 
 class WorkspaceTUI(App):
@@ -75,9 +75,8 @@ class WorkspaceTUI(App):
     def on_mount(self) -> None:
         self.run_worker(self._initialize_services, thread=True)
 
-    async def _initialize_services(self) -> None:
-        status_bar = self.query_one(StatusBar)
-        status_bar.connection_status = "Connessione..."
+    def _initialize_services(self) -> None:
+        self.app.call_from_thread(self._set_status, "Connessione...")
 
         try:
             creds = load_or_create_credentials(
@@ -86,31 +85,22 @@ class WorkspaceTUI(App):
             )
 
             self._gmail_service = GmailService(credentials=creds, cache=self._cache)
-            gmail_tab = self.query_one(GmailTab)
-            gmail_tab.set_service(self._gmail_service)
-
             self._calendar_service = CalendarService(credentials=creds, cache=self._cache)
-            calendar_tab = self.query_one(CalendarTab)
-            calendar_tab.set_service(self._calendar_service)
-
             self._drive_service = DriveService(credentials=creds, cache=self._cache)
-            drive_tab = self.query_one(DriveTab)
-            drive_tab.set_service(self._drive_service)
-
             self._chat_service = ChatService(credentials=creds, cache=self._cache)
-            chat_tab = self.query_one(ChatTab)
-            chat_tab.set_service(self._chat_service)
 
-            status_bar.connection_status = "Connesso"
+            self.app.call_from_thread(self._wire_google_services)
             logger.info("Google services initialized")
 
         except ConfigurationError as exc:
-            status_bar.connection_status = "Errore config"
-            self.notify(str(exc.message), severity="error", timeout=10)
+            self.app.call_from_thread(self._set_status, "Errore config")
+            self.app.call_from_thread(self.notify, str(exc.message), severity="error", timeout=10)
             logger.error("Configuration error: {}", exc.message)
         except Exception as exc:
-            status_bar.connection_status = "Errore"
-            self.notify(f"Errore connessione Google: {exc}", severity="error", timeout=10)
+            self.app.call_from_thread(self._set_status, "Errore")
+            self.app.call_from_thread(
+                self.notify, f"Errore connessione Google: {exc}", severity="error", timeout=10
+            )
             logger.error("Failed to initialize Google services: {}", exc)
 
         if self.settings.jira_configured:
@@ -121,21 +111,32 @@ class WorkspaceTUI(App):
                     base_url=self.settings.jira_base_url,
                 )
                 self._jira_service = JiraService(session=session, cache=self._cache)
-                jira_tab = self.query_one(JiraTab)
-                jira_tab.set_service(self._jira_service)
-
-                if not self.settings.jira_account_id:
-                    try:
-                        myself = self._jira_service.get_myself()
-                        logger.info("Jira user: {}", myself.get("displayName", ""))
-                    except Exception:
-                        pass
-
-                status_bar.jira_count = 0
+                self.app.call_from_thread(self._wire_jira_service)
                 logger.info("Jira service initialized")
             except Exception as exc:
-                self.notify(f"Errore Jira: {exc}", severity="warning", timeout=5)
+                self.app.call_from_thread(
+                    self.notify, f"Errore Jira: {exc}", severity="warning", timeout=5
+                )
                 logger.error("Failed to initialize Jira: {}", exc)
+
+    def _set_status(self, status: str) -> None:
+        self.query_one(StatusBar).connection_status = status
+
+    def _wire_google_services(self) -> None:
+        self._set_status("Connesso")
+        if self._gmail_service:
+            self.query_one(GmailTab).set_service(self._gmail_service)
+        if self._calendar_service:
+            self.query_one(CalendarTab).set_service(self._calendar_service)
+        if self._drive_service:
+            self.query_one(DriveTab).set_service(self._drive_service)
+        if self._chat_service:
+            self.query_one(ChatTab).set_service(self._chat_service)
+
+    def _wire_jira_service(self) -> None:
+        if self._jira_service:
+            self.query_one(JiraTab).set_service(self._jira_service)
+            self.query_one(StatusBar).jira_count = 0
 
     def action_switch_tab(self, tab_id: str) -> None:
         tabbed_content = self.query_one(TabbedContent)

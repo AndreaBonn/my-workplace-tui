@@ -7,7 +7,7 @@ from textual.reactive import reactive
 from textual.widgets import Input, Static
 
 from workspace_tui.config.settings import Settings
-from workspace_tui.services.jira import JiraIssue, JiraService
+from workspace_tui.services.jira import JiraIssue, JiraService, JiraWorklog
 from workspace_tui.ui.widgets.issue_create_modal import IssueCreateData, IssueCreateModal
 from workspace_tui.ui.widgets.issue_detail import IssueDetail
 from workspace_tui.ui.widgets.issue_list import IssueListView, IssueSelected
@@ -17,19 +17,6 @@ JIRA_DISABLED_MESSAGE = (
     "Configura JIRA_USERNAME, JIRA_API_TOKEN e JIRA_BASE_URL "
     "nel file .env per abilitare questa tab."
 )
-
-STATUS_OPTIONS = [
-    ("Tutti", ""),
-    ("To Do", "To Do"),
-    ("In Progress", "In Progress"),
-    ("In Review", "In Review"),
-    ("Done", "Done"),
-]
-
-ASSIGNEE_OPTIONS = [
-    ("Me", "me"),
-    ("Tutti", "all"),
-]
 
 
 class JiraTab(Vertical):
@@ -93,11 +80,14 @@ class JiraTab(Vertical):
         self._current_jql = jql
         self.app.run_worker(lambda: self._search_worker(jql), thread=True)
 
-    async def _search_worker(self, jql: str) -> None:
+    def _search_worker(self, jql: str) -> None:
         if not self.jira_service:
             return
         max_results = self._settings.jira_max_results if self._settings else 50
         issues, _total = self.jira_service.search_issues(jql=jql, max_results=max_results)
+        self.app.call_from_thread(self._update_issue_list, issues)
+
+    def _update_issue_list(self, issues: list[JiraIssue]) -> None:
         issue_list = self.query_one("#issue-list", IssueListView)
         issue_list.set_issues(issues)
 
@@ -105,19 +95,21 @@ class JiraTab(Vertical):
         if not self.jira_service:
             return
         self.app.run_worker(
-            lambda: self._load_issue_detail(event.issue.key),
+            lambda: self._load_issue_detail_worker(event.issue.key),
             thread=True,
         )
 
-    async def _load_issue_detail(self, issue_key: str) -> None:
+    def _load_issue_detail_worker(self, issue_key: str) -> None:
         if not self.jira_service:
             return
         issue = self.jira_service.get_issue(issue_key)
+        worklogs = self.jira_service.get_worklogs(issue_key)
+        self.app.call_from_thread(self._update_issue_detail, issue, worklogs)
+
+    def _update_issue_detail(self, issue: JiraIssue, worklogs: list[JiraWorklog]) -> None:
         self.selected_issue = issue
         detail = self.query_one("#issue-detail", IssueDetail)
         detail.issue = issue
-
-        worklogs = self.jira_service.get_worklogs(issue_key)
         detail.set_worklogs(worklogs)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -152,7 +144,7 @@ class JiraTab(Vertical):
             thread=True,
         )
 
-    async def _create_issue_worker(self, data: IssueCreateData) -> None:
+    def _create_issue_worker(self, data: IssueCreateData) -> None:
         if not self.jira_service:
             return
         key = self.jira_service.create_issue(
@@ -163,8 +155,8 @@ class JiraTab(Vertical):
             assignee_id=data.assignee_id,
             description=data.description,
         )
-        self.app.notify(f"Issue {key} creata")
-        self._execute_jql(self._current_jql)
+        self.app.call_from_thread(self.app.notify, f"Issue {key} creata")
+        self.app.call_from_thread(self._execute_jql, self._current_jql)
 
     def action_transition(self) -> None:
         issue = self.selected_issue
@@ -172,21 +164,24 @@ class JiraTab(Vertical):
             self.app.notify("Seleziona un'issue", severity="warning")
             return
         self.app.run_worker(
-            lambda: self._show_transitions(issue.key),
+            lambda: self._show_transitions_worker(issue.key),
             thread=True,
         )
 
-    async def _show_transitions(self, issue_key: str) -> None:
+    def _show_transitions_worker(self, issue_key: str) -> None:
         if not self.jira_service:
             return
         transitions = self.jira_service.get_transitions(issue_key)
         if not transitions:
-            self.app.notify("Nessuna transizione disponibile", severity="warning")
+            self.app.call_from_thread(
+                self.app.notify, "Nessuna transizione disponibile", severity="warning"
+            )
             return
 
         options = "\n".join(f"  {i + 1}. {t.name}" for i, t in enumerate(transitions))
-        self.app.notify(
-            f"Transizioni per {issue_key}:\n{options}\n(usa i numeri per selezionare)",
+        self.app.call_from_thread(
+            self.app.notify,
+            f"Transizioni per {issue_key}:\n{options}",
             timeout=10,
         )
 

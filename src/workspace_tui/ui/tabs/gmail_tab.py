@@ -58,7 +58,7 @@ class GmailTab(Vertical):
             return
         self.app.run_worker(self._load_labels_worker, thread=True)
 
-    async def _load_labels_worker(self) -> None:
+    def _load_labels_worker(self) -> None:
         if not self.gmail_service:
             return
         labels = self.gmail_service.list_labels()
@@ -77,22 +77,28 @@ class GmailTab(Vertical):
             )
         )
 
+        sorted_labels = system_labels + user_labels
+        self.app.call_from_thread(self._update_folder_list, sorted_labels)
+        self.app.call_from_thread(self.load_messages)
+
+    def _update_folder_list(self, labels: list[GmailLabel]) -> None:
         folder_list = self.query_one("#folder-list", ListView)
         folder_list.clear()
-        for label in system_labels + user_labels:
+        for label in labels:
             folder_list.append(FolderItem(label=label))
-
-        self.load_messages()
 
     def load_messages(self) -> None:
         if not self.gmail_service:
             return
         self.app.run_worker(self._load_messages_worker, thread=True)
 
-    async def _load_messages_worker(self) -> None:
+    def _load_messages_worker(self) -> None:
         if not self.gmail_service:
             return
         messages, _ = self.gmail_service.list_messages(label_id=self.current_label)
+        self.app.call_from_thread(self._update_message_list, messages)
+
+    def _update_message_list(self, messages: list[EmailMessage]) -> None:
         email_list = self.query_one("#email-list", EmailListView)
         email_list.set_messages(messages)
 
@@ -104,22 +110,22 @@ class GmailTab(Vertical):
     def on_email_selected(self, event: EmailSelected) -> None:
         if not self.gmail_service:
             return
-        self.app.run_worker(
-            lambda: self._load_preview(event.message.message_id),
-            thread=True,
-        )
+        msg_id = event.message.message_id
+        self.app.run_worker(lambda: self._load_preview_worker(msg_id), thread=True)
 
-    async def _load_preview(self, message_id: str) -> None:
+    def _load_preview_worker(self, message_id: str) -> None:
         if not self.gmail_service:
             return
         full_msg = self.gmail_service.get_message(message_id)
         if full_msg:
-            self.selected_message = full_msg
-            preview = self.query_one("#email-preview", EmailPreview)
-            preview.message = full_msg
-
+            self.app.call_from_thread(self._update_preview, full_msg)
             if full_msg.is_unread:
                 self.gmail_service.toggle_read(message_id, is_unread=True)
+
+    def _update_preview(self, msg: EmailMessage) -> None:
+        self.selected_message = msg
+        preview = self.query_one("#email-preview", EmailPreview)
+        preview.message = msg
 
     def action_compose(self) -> None:
         self.app.push_screen(

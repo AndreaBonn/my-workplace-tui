@@ -3,18 +3,11 @@ from pathlib import Path
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.message import Message
 from textual.reactive import reactive
 from textual.widgets import ListItem, ListView, Static
 
 from workspace_tui.services.drive import DriveFile, DriveService
 from workspace_tui.utils.text_utils import format_size
-
-
-class FileSelected(Message):
-    def __init__(self, file: DriveFile) -> None:
-        self.file = file
-        super().__init__()
 
 
 class FileItem(ListItem):
@@ -65,10 +58,13 @@ class DriveTab(Vertical):
             return
         self.app.run_worker(lambda: self._load_files_worker(folder_id), thread=True)
 
-    async def _load_files_worker(self, folder_id: str) -> None:
+    def _load_files_worker(self, folder_id: str) -> None:
         if not self.drive_service:
             return
         files, _next = self.drive_service.list_files(folder_id=folder_id)
+        self.app.call_from_thread(self._update_file_list, files)
+
+    def _update_file_list(self, files: list[DriveFile]) -> None:
         file_list = self.query_one("#drive-file-list", ListView)
         file_list.clear()
         for f in files:
@@ -131,32 +127,28 @@ class DriveTab(Vertical):
     def action_view_recent(self) -> None:
         if not self.drive_service:
             return
-        self.app.run_worker(self._load_recent, thread=True)
+        self.app.run_worker(self._load_recent_worker, thread=True)
 
-    async def _load_recent(self) -> None:
+    def _load_recent_worker(self) -> None:
         if not self.drive_service:
             return
         files = self.drive_service.list_recent()
-        file_list = self.query_one("#drive-file-list", ListView)
-        file_list.clear()
-        for f in files:
-            file_list.append(FileItem(file=f))
-        self.query_one("#drive-breadcrumb", Static).update("Recenti")
+        self.app.call_from_thread(self._update_file_list, files)
+        self.app.call_from_thread(self.query_one("#drive-breadcrumb", Static).update, "Recenti")
 
     def action_view_shared(self) -> None:
         if not self.drive_service:
             return
-        self.app.run_worker(self._load_shared, thread=True)
+        self.app.run_worker(self._load_shared_worker, thread=True)
 
-    async def _load_shared(self) -> None:
+    def _load_shared_worker(self) -> None:
         if not self.drive_service:
             return
         files = self.drive_service.list_shared()
-        file_list = self.query_one("#drive-file-list", ListView)
-        file_list.clear()
-        for f in files:
-            file_list.append(FileItem(file=f))
-        self.query_one("#drive-breadcrumb", Static).update("Condivisi con me")
+        self.app.call_from_thread(self._update_file_list, files)
+        self.app.call_from_thread(
+            self.query_one("#drive-breadcrumb", Static).update, "Condivisi con me"
+        )
 
     def action_view_root(self) -> None:
         self.folder_stack = []

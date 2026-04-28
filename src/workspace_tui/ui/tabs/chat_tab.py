@@ -1,3 +1,4 @@
+from loguru import logger
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -56,40 +57,44 @@ class ChatTab(Vertical):
             return
         self.app.run_worker(self._load_spaces_worker, thread=True)
 
-    async def _load_spaces_worker(self) -> None:
+    def _load_spaces_worker(self) -> None:
         if not self.chat_service:
             return
         try:
             spaces = self.chat_service.list_spaces()
             dm_spaces = [s for s in spaces if s.is_dm]
             group_spaces = [s for s in spaces if not s.is_dm]
-
-            space_list = self.query_one("#space-list", ListView)
-            space_list.clear()
-            for space in dm_spaces + group_spaces:
-                space_list.append(SpaceItem(space=space))
+            self.app.call_from_thread(self._update_space_list, dm_spaces + group_spaces)
         except Exception as exc:
-            self.chat_available = False
-            from loguru import logger
-
             logger.warning("Chat API unavailable: {}", exc)
-            messages_widget = self.query_one("#chat-messages", Static)
-            messages_widget.update(CHAT_UNAVAILABLE_MESSAGE)
+            self.app.call_from_thread(self._show_unavailable)
+
+    def _update_space_list(self, spaces: list[ChatSpace]) -> None:
+        space_list = self.query_one("#space-list", ListView)
+        space_list.clear()
+        for space in spaces:
+            space_list.append(SpaceItem(space=space))
+
+    def _show_unavailable(self) -> None:
+        self.chat_available = False
+        messages_widget = self.query_one("#chat-messages", Static)
+        messages_widget.update(CHAT_UNAVAILABLE_MESSAGE)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if not isinstance(event.item, SpaceItem) or not self.chat_service:
             return
         self.current_space = event.item.space.name
+        space_name = event.item.space.name
         self.app.run_worker(
-            lambda: self._load_messages(event.item.space.name),
+            lambda: self._load_messages_worker(space_name),
             thread=True,
         )
 
-    async def _load_messages(self, space_name: str) -> None:
+    def _load_messages_worker(self, space_name: str) -> None:
         if not self.chat_service:
             return
         messages = self.chat_service.list_messages(space_name)
-        self._render_messages(messages)
+        self.app.call_from_thread(self._render_messages, messages)
 
     def _render_messages(self, messages: list[ChatMessage]) -> None:
         widget = self.query_one("#chat-messages", Static)

@@ -39,21 +39,21 @@ class CalendarTab(Vertical):
             return
         self.app.run_worker(self._load_events_worker, thread=True)
 
-    async def _load_events_worker(self) -> None:
+    def _load_events_worker(self) -> None:
         if not self.calendar_service:
             return
         events = self.calendar_service.list_events()
-        self.events = events
-        self._render_events()
+        self.app.call_from_thread(self._render_events, events)
 
-    def _render_events(self) -> None:
+    def _render_events(self, events: list[CalendarEvent]) -> None:
+        self.events = events
         events_widget = self.query_one("#calendar-events", Static)
-        if not self.events:
+        if not events:
             events_widget.update("Nessun evento nei prossimi 30 giorni")
             return
 
         lines = []
-        for event in self.events:
+        for event in events:
             dt = parse_date(event.start)
             time_str = format_datetime_short(dt) if dt else event.start
             location = f" 📍 {event.location}" if event.location else ""
