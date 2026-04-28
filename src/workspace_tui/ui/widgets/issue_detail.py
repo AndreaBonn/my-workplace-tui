@@ -13,10 +13,10 @@ class IssueDetail(VerticalScroll):
     worklogs: reactive[list[JiraWorklog]] = reactive(list, init=False)
 
     def compose(self) -> ComposeResult:
-        yield Static("", id="issue-header")
-        yield Static("", id="issue-description")
-        yield Static("", id="issue-worklogs")
-        yield Static("", id="issue-links")
+        yield Static("", id="issue-header", markup=False)
+        yield Static("", id="issue-description", markup=False)
+        yield Static("", id="issue-worklogs", markup=False)
+        yield Static("", id="issue-links", markup=False)
 
     def watch_issue(self, issue: JiraIssue | None) -> None:
         if issue is None:

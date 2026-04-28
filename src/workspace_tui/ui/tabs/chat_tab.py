@@ -42,7 +42,9 @@ class ChatTab(Vertical):
                 yield Static("Messaggi diretti", classes="panel-title")
                 yield ListView(id="space-list")
             with Vertical(id="chat-conversation"):
-                yield VerticalScroll(Static("Seleziona una conversazione", id="chat-messages"))
+                yield VerticalScroll(
+                    Static("Seleziona una conversazione", id="chat-messages", markup=False)
+                )
                 yield Input(placeholder="Scrivi un messaggio...", id="chat-input")
 
     def set_service(self, service: ChatService) -> None:

@@ -11,9 +11,9 @@ class EmailPreview(VerticalScroll):
     message: reactive[EmailMessage | None] = reactive(None)
 
     def compose(self) -> ComposeResult:
-        yield Static("", id="preview-headers")
-        yield Static("", id="preview-body")
-        yield Static("", id="preview-attachments")
+        yield Static("", id="preview-headers", markup=False)
+        yield Static("", id="preview-body", markup=False)
+        yield Static("", id="preview-attachments", markup=False)
 
     def watch_message(self, message: EmailMessage | None) -> None:
         if message is None:
