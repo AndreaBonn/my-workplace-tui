@@ -1,9 +1,9 @@
 from workspace_tui.services.errors import (
     AuthenticationError,
     ConfigurationError,
-    ConnectionError,
+    ConnectionFailedError,
     NotFoundError,
-    PermissionError,
+    PermissionDeniedError,
     RateLimitError,
     ServiceError,
 )
@@ -35,9 +35,9 @@ class TestAuthenticationError:
         assert "Authentication failed" in err.message
 
 
-class TestPermissionError:
+class TestPermissionDeniedError:
     def test_default_message(self):
-        err = PermissionError()
+        err = PermissionDeniedError()
         assert err.code == "PERMISSION_ERROR"
 
 
@@ -47,14 +47,14 @@ class TestRateLimitError:
         assert err.code == "RATE_LIMIT"
 
 
-class TestConnectionError:
+class TestConnectionFailedError:
     def test_default_service(self):
-        err = ConnectionError()
+        err = ConnectionFailedError()
         assert "API" in err.message
         assert err.code == "CONNECTION_ERROR"
 
     def test_custom_service(self):
-        err = ConnectionError(service="Gmail")
+        err = ConnectionFailedError(service="Gmail")
         assert "Gmail" in err.message
 
 

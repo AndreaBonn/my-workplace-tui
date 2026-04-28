@@ -10,7 +10,7 @@ class AuthenticationError(ServiceError):
         super().__init__(message=message, code="AUTH_ERROR")
 
 
-class PermissionError(ServiceError):
+class PermissionDeniedError(ServiceError):
     def __init__(self, message: str = "Insufficient permissions") -> None:
         super().__init__(message=message, code="PERMISSION_ERROR")
 
@@ -25,7 +25,7 @@ class NotFoundError(ServiceError):
         super().__init__(message=f"{entity} '{identifier}' not found", code="NOT_FOUND")
 
 
-class ConnectionError(ServiceError):
+class ConnectionFailedError(ServiceError):
     def __init__(self, service: str = "API") -> None:
         super().__init__(message=f"Cannot connect to {service}", code="CONNECTION_ERROR")
 
