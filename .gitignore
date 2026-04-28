@@ -1,20 +1,48 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.venv/
-.env
 *.egg-info/
+.eggs/
 dist/
 build/
-.eggs/
+
+# Virtual environment
+.venv/
+.python-version
+
+# Environment and secrets
+.env
+credentials/client_secret.json
+credentials/token.json
+
+# Testing and coverage
 .pytest_cache/
-.ruff_cache/
-.mypy_cache/
 htmlcov/
 .coverage
 coverage.xml
-credentials/client_secret.json
-credentials/token.json
+
+# Linting and type checking
+.ruff_cache/
+.mypy_cache/
+
+# Logs
 *.log
+
+# Cache
 .cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project docs (internal specs, not for distribution)
+doc_progetto/
