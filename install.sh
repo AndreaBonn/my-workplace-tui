@@ -26,11 +26,26 @@ echo "[OK] Python ${PYTHON_VERSION}"
 
 # Check uv
 if ! command -v uv &> /dev/null; then
-    echo "Errore: uv non trovato."
-    echo "Installa uv prima di procedere: https://docs.astral.sh/uv/getting-started/installation/"
-    exit 1
+    echo "uv non trovato."
+    read -rp "Vuoi installare uv automaticamente? [s/N] " risposta
+    if [[ "$risposta" =~ ^[sS]$ ]]; then
+        echo "Installazione uv..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        # Aggiorna PATH per la sessione corrente
+        export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
+        if ! command -v uv &> /dev/null; then
+            echo "Errore: installazione uv fallita."
+            exit 1
+        fi
+        echo "[OK] uv installato — $(uv --version)"
+    else
+        echo "Installazione annullata. Installa uv manualmente:"
+        echo "  https://docs.astral.sh/uv/getting-started/installation/"
+        exit 1
+    fi
+else
+    echo "[OK] uv $(uv --version)"
 fi
-echo "[OK] uv $(uv --version)"
 
 # Install dependencies
 echo "Installazione dipendenze..."
