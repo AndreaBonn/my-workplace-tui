@@ -144,3 +144,35 @@ class TestListSharedDrives:
         mock_api.drives().list().execute.return_value = {}
         drives = drive_service.list_shared_drives()
         assert drives == []
+
+
+class TestSearchFiles:
+    def test_search_by_name(self, drive_service, mock_api):
+        mock_api.files().list().execute.return_value = {
+            "files": [{"id": "f1", "name": "Report Q1.pdf", "mimeType": "application/pdf"}]
+        }
+        files = drive_service.search_files(name="Report")
+        assert len(files) == 1
+        assert files[0].name == "Report Q1.pdf"
+
+    def test_search_by_type(self, drive_service, mock_api):
+        mock_api.files().list().execute.return_value = {
+            "files": [{"id": "f1", "name": "Budget.xlsx", "mimeType": "application/vnd.ms-excel"}]
+        }
+        files = drive_service.search_files(file_type="fogli")
+        assert len(files) == 1
+
+    def test_search_shared_with_me(self, drive_service, mock_api):
+        mock_api.files().list().execute.return_value = {"files": []}
+        files = drive_service.search_files(shared_with_me=True)
+        assert files == []
+
+    def test_search_no_filters_returns_all(self, drive_service, mock_api):
+        mock_api.files().list().execute.return_value = {
+            "files": [
+                {"id": "f1", "name": "A.txt", "mimeType": "text/plain"},
+                {"id": "f2", "name": "B.txt", "mimeType": "text/plain"},
+            ]
+        }
+        files = drive_service.search_files()
+        assert len(files) == 2

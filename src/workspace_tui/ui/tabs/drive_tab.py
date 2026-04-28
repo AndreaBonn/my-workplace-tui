@@ -1,10 +1,11 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
-from textual.widgets import ListItem, ListView, Static
+from textual.widgets import Checkbox, Input, ListItem, ListView, Static
 
 from workspace_tui.services.drive import DriveFile, DriveService, SharedDrive
 from workspace_tui.utils.date_utils import format_relative, parse_date
@@ -15,6 +16,16 @@ VIEW_MY_DRIVE = "my_drive"
 VIEW_SHARED_DRIVE = "shared_drive"
 VIEW_SHARED_WITH_ME = "shared_with_me"
 VIEW_RECENT = "recent"
+VIEW_SEARCH = "search"
+
+SEPARATOR = "─" * 36
+
+MODIFIED_OPTIONS = {
+    "oggi": 0,
+    "settimana": 7,
+    "mese": 30,
+    "anno": 365,
+}
 
 
 class FileItem(ListItem):
@@ -50,6 +61,10 @@ class NavItem(ListItem):
         yield Static(self.nav_label, markup=True)
 
 
+SHARING_INTERNAL = "interno"
+SHARING_EXTERNAL = "esterno"
+
+
 class DriveTab(Vertical):
     BINDINGS = [
         Binding("o", "open_selected", "Apri", show=True),
@@ -60,6 +75,7 @@ class DriveTab(Vertical):
         Binding("S", "view_shared", "Condivisi", show=True),
         Binding("M", "view_root", "Il mio Drive", show=True),
         Binding("H", "view_home", "Home", show=True),
+        Binding("slash", "focus_search", "Cerca", show=True),
     ]
 
     drive_service: reactive[DriveService | None] = reactive(None, init=False)
@@ -69,10 +85,47 @@ class DriveTab(Vertical):
     folder_stack: reactive[list[str]] = reactive(list, init=False)
     selected_file: reactive[DriveFile | None] = reactive(None, init=False)
 
+    def __init__(self, workspace_domain: str = "", **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._workspace_domain = workspace_domain.lower().strip()
+
     def compose(self) -> ComposeResult:
         with Horizontal(id="drive-layout"):
             with Vertical(id="drive-browser"):
-                yield Static("Drive", id="drive-breadcrumb", classes="panel-title")
+                with Vertical(id="drive-filters"):
+                    yield Static(
+                        " FILTRI (Enter per cercare)",
+                        classes="panel-title",
+                    )
+                    yield Input(
+                        placeholder="Nome: es. report",
+                        id="drive-filter-name",
+                    )
+                    yield Input(
+                        placeholder="Proprietario: email",
+                        id="drive-filter-owner",
+                    )
+                    yield Input(
+                        placeholder="Tipo: documenti/fogli/pdf/immagini/video",
+                        id="drive-filter-type",
+                    )
+                    yield Input(
+                        placeholder="Modifica: oggi/settimana/mese/anno",
+                        id="drive-filter-modified",
+                    )
+                    yield Checkbox(
+                        "Solo condivisi con me",
+                        id="drive-filter-shared",
+                    )
+                    yield Input(
+                        placeholder="Condivisione: interno/esterno",
+                        id="drive-filter-sharing",
+                    )
+                yield Static(
+                    "Drive",
+                    id="drive-breadcrumb",
+                    classes="panel-title",
+                )
                 yield ListView(id="drive-file-list")
             with Vertical(id="drive-detail"):
                 yield Static(
@@ -92,8 +145,100 @@ class DriveTab(Vertical):
             self.action_view_recent()
         elif self.current_view == VIEW_SHARED_WITH_ME:
             self.action_view_shared()
+        elif self.current_view == VIEW_SEARCH:
+            self._execute_filter_search()
         elif self.current_view in (VIEW_MY_DRIVE, VIEW_SHARED_DRIVE):
             self._load_files(self.current_folder)
+
+    # ── Filters ────────────────────────────────────────────────
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        filter_ids = (
+            "drive-filter-name",
+            "drive-filter-owner",
+            "drive-filter-type",
+            "drive-filter-modified",
+            "drive-filter-sharing",
+        )
+        if event.input.id in filter_ids:
+            self._execute_filter_search()
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        if event.checkbox.id == "drive-filter-shared":
+            self._execute_filter_search()
+
+    def _execute_filter_search(self) -> None:
+        name = self.query_one("#drive-filter-name", Input).value.strip()
+        owner = self.query_one("#drive-filter-owner", Input).value.strip()
+        file_type = self.query_one("#drive-filter-type", Input).value.strip().lower()
+        modified_str = self.query_one("#drive-filter-modified", Input).value.strip().lower()
+        shared = self.query_one("#drive-filter-shared", Checkbox).value
+        sharing = self.query_one("#drive-filter-sharing", Input).value.strip().lower()
+
+        if not any([name, owner, file_type, modified_str, shared, sharing]):
+            self._show_home()
+            return
+
+        modified_after = ""
+        if modified_str in MODIFIED_OPTIONS:
+            days = MODIFIED_OPTIONS[modified_str]
+            dt = datetime.now(tz=UTC) - timedelta(days=days)
+            modified_after = dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+        self.current_view = VIEW_SEARCH
+        self.folder_stack = []
+        self._update_breadcrumb("Risultati ricerca")
+
+        if not self.drive_service:
+            return
+        self.app.run_worker(
+            lambda: self._search_worker(
+                name=name,
+                owner=owner,
+                file_type=file_type,
+                modified_after=modified_after,
+                shared=shared,
+                sharing=sharing,
+            ),
+            thread=True,
+        )
+
+    def _search_worker(
+        self,
+        name: str,
+        owner: str,
+        file_type: str,
+        modified_after: str,
+        shared: bool,
+        sharing: str,
+    ) -> None:
+        if not self.drive_service:
+            return
+        files = self.drive_service.search_files(
+            name=name,
+            owner_email=owner,
+            file_type=file_type,
+            modified_after=modified_after,
+            shared_with_me=shared,
+        )
+        if sharing and self._workspace_domain:
+            files = self._filter_by_sharing(files, sharing=sharing)
+        elif sharing and not self._workspace_domain:
+            self.app.call_from_thread(
+                self.app.notify,
+                "WORKSPACE_DOMAIN non configurato in .env",
+                severity="warning",
+                timeout=4,
+            )
+        self.app.call_from_thread(self._update_file_list, files)
+
+    def _filter_by_sharing(self, files: list[DriveFile], sharing: str) -> list[DriveFile]:
+        domain = self._workspace_domain
+        if sharing == SHARING_INTERNAL:
+            return [f for f in files if f.owner.endswith(f"@{domain}")]
+        if sharing == SHARING_EXTERNAL:
+            return [f for f in files if f.owner and not f.owner.endswith(f"@{domain}")]
+        return files
 
     # ── Home view ──────────────────────────────────────────────
 
@@ -155,12 +300,12 @@ class DriveTab(Vertical):
         detail.update(
             "[bold]Drive[/bold]\n\n"
             "  Naviga tra i tuoi Drive.\n"
-            "  Seleziona una voce per aprirla.\n\n"
-            "─" * 36 + "\n\n"
+            "  Seleziona una voce per aprirla.\n\n" + SEPARATOR + "\n\n"
             "  [bold reverse] H [/] Home  "
             "[bold reverse] M [/] Il mio Drive\n"
             "  [bold reverse] S [/] Condivisi  "
-            "[bold reverse] R [/] Recenti"
+            "[bold reverse] R [/] Recenti\n"
+            "  [bold reverse] / [/] Cerca"
         )
 
     # ── File listing ───────────────────────────────────────────
@@ -221,7 +366,10 @@ class DriveTab(Vertical):
 
     def _handle_file_selected(self, file: DriveFile) -> None:
         if file.is_folder:
-            self.folder_stack = [*self.folder_stack, self.current_folder]
+            self.folder_stack = [
+                *self.folder_stack,
+                self.current_folder,
+            ]
             self._load_files(file.file_id)
             self._update_breadcrumb(file.name)
 
@@ -247,7 +395,7 @@ class DriveTab(Vertical):
             f"  [dim]Modifica[/dim] {modified}",
             f"  [dim]Propri.[/dim]  {file.owner}",
             "",
-            "─" * 36,
+            SEPARATOR,
             "",
             "  [bold reverse] o [/] Apri    [bold reverse] d [/] Download",
             "  [bold reverse] b [/] Indietro  [bold reverse] H [/] Home",
@@ -255,14 +403,15 @@ class DriveTab(Vertical):
             "  [bold reverse] R [/] Recenti "
             "[bold reverse] S [/] Condivisi "
             "[bold reverse] M [/] Root",
+            "  [bold reverse] / [/] Cerca",
         ]
         detail.update("\n".join(lines))
 
     def _update_nav_detail(self, item: NavItem) -> None:
         detail = self.query_one("#drive-file-detail", Static)
         descriptions = {
-            VIEW_MY_DRIVE: "File e cartelle nel tuo Drive personale.",
-            VIEW_SHARED_WITH_ME: "File e cartelle condivisi da altri con te.",
+            VIEW_MY_DRIVE: ("File e cartelle nel tuo Drive personale."),
+            VIEW_SHARED_WITH_ME: ("File e cartelle condivisi da altri con te."),
             VIEW_RECENT: "File aperti o modificati di recente.",
             VIEW_SHARED_DRIVE: "",
         }
@@ -279,7 +428,10 @@ class DriveTab(Vertical):
 
     def action_open_selected(self) -> None:
         if self.selected_file and self.selected_file.is_folder:
-            self.folder_stack = [*self.folder_stack, self.current_folder]
+            self.folder_stack = [
+                *self.folder_stack,
+                self.current_folder,
+            ]
             self._load_files(self.selected_file.file_id)
             self._update_breadcrumb(self.selected_file.name)
 
@@ -306,7 +458,10 @@ class DriveTab(Vertical):
             self.app.notify("Seleziona un file", severity="warning")
             return
         if self.selected_file.is_folder:
-            self.app.notify("Non puoi scaricare una cartella", severity="warning")
+            self.app.notify(
+                "Non puoi scaricare una cartella",
+                severity="warning",
+            )
             return
         file = self.selected_file
         dest = Path.home() / "Downloads"
@@ -361,6 +516,9 @@ class DriveTab(Vertical):
 
     def action_view_home(self) -> None:
         self._show_home()
+
+    def action_focus_search(self) -> None:
+        self.query_one("#drive-filter-name", Input).focus()
 
     # ── Helpers ────────────────────────────────────────────────
 

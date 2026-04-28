@@ -11,6 +11,7 @@ from workspace_tui.services.base import BaseService
 CACHE_PREFIX = "drive:"
 TTL_FILE_LIST = 120
 TTL_FILE_DETAIL = 300
+TTL_SEARCH = 60
 
 EXPORT_FORMATS = {
     "application/vnd.google-apps.document": ("text/plain", ".txt"),
@@ -25,6 +26,36 @@ MIME_ICONS = {
     "application/vnd.google-apps.presentation": "📑",
     "application/pdf": "📕",
     "image/": "🖼",
+}
+
+MIME_TYPE_FILTERS: dict[str, list[str]] = {
+    "documenti": [
+        "application/vnd.google-apps.document",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain",
+    ],
+    "fogli": [
+        "application/vnd.google-apps.spreadsheet",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/csv",
+    ],
+    "presentazioni": [
+        "application/vnd.google-apps.presentation",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ],
+    "pdf": ["application/pdf"],
+    "immagini": [
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/svg+xml",
+    ],
+    "video": ["video/mp4", "video/quicktime", "video/x-msvideo"],
+    "cartelle": ["application/vnd.google-apps.folder"],
 }
 
 
@@ -107,6 +138,60 @@ class DriveService(BaseService):
             return files, next_token
 
         return self._cached(cache_key, ttl=TTL_FILE_LIST, fetch=fetch)
+
+    def search_files(
+        self,
+        name: str = "",
+        owner_email: str = "",
+        file_type: str = "",
+        modified_after: str = "",
+        shared_with_me: bool = False,
+        max_results: int = 100,
+    ) -> list[DriveFile]:
+        cache_key = (
+            f"{CACHE_PREFIX}search:{name}:{owner_email}:"
+            f"{file_type}:{modified_after}:{shared_with_me}"
+        )
+
+        def fetch():
+            q_parts = ["trashed = false"]
+
+            if name:
+                safe = name.replace("\\", "\\\\").replace("'", "\\'")
+                q_parts.append(f"name contains '{safe}'")
+            if owner_email:
+                safe = owner_email.replace("'", "\\'")
+                q_parts.append(f"'{safe}' in owners")
+            if file_type and file_type in MIME_TYPE_FILTERS:
+                mimes = MIME_TYPE_FILTERS[file_type]
+                if len(mimes) == 1:
+                    q_parts.append(f"mimeType = '{mimes[0]}'")
+                else:
+                    clauses = " or ".join(f"mimeType = '{m}'" for m in mimes)
+                    q_parts.append(f"({clauses})")
+            if modified_after:
+                q_parts.append(f"modifiedTime > '{modified_after}'")
+            if shared_with_me:
+                q_parts.append("sharedWithMe = true")
+
+            q = " and ".join(q_parts)
+            result = self._retry(
+                lambda: (
+                    self._service.files()
+                    .list(
+                        q=q,
+                        pageSize=max_results,
+                        fields=("files(id, name, mimeType, size, modifiedTime, owners)"),
+                        orderBy="modifiedTime desc",
+                        supportsAllDrives=True,
+                        includeItemsFromAllDrives=True,
+                    )
+                    .execute()
+                )
+            )
+            return [self._parse_file(f) for f in result.get("files", [])]
+
+        return self._cached(cache_key, ttl=TTL_SEARCH, fetch=fetch)
 
     def list_recent(self, max_results: int = 50) -> list[DriveFile]:
         cache_key = f"{CACHE_PREFIX}recent"

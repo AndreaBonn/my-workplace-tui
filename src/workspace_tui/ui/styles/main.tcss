@@ -167,6 +167,34 @@ StatusBar {
     padding: 1 0;
 }
 
+#drive-filters {
+    height: auto;
+    max-height: 14;
+    padding: 0;
+}
+
+#drive-filters Input {
+    height: 1;
+    border: none;
+    margin: 0;
+    padding: 0 1;
+    background: $surface;
+}
+
+#drive-filters Input:focus {
+    background: $primary 20%;
+}
+
+#drive-filters Checkbox {
+    height: 1;
+    max-height: 1;
+    min-height: 1;
+    margin: 0;
+    padding: 0 1;
+    border: none;
+    background: $surface;
+}
+
 #chat-layout {
     height: 1fr;
 }

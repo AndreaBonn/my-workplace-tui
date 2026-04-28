@@ -63,7 +63,9 @@ class WorkspaceTUI(App):
             with TabPane("[3] Calendar", id="calendar"):
                 yield CalendarTab()
             with TabPane("[4] Drive", id="drive"):
-                yield DriveTab()
+                yield DriveTab(
+                    workspace_domain=self.settings.workspace_domain,
+                )
             with TabPane("[5] Jira", id="jira"):
                 yield JiraTab(
                     enabled=self.settings.jira_configured,

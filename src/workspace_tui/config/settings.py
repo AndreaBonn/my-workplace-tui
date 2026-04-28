@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Notifications
     notifications_enabled: bool = True
 
+    # Google Drive
+    workspace_domain: str = ""
+
     # Cache
     cache_enabled: bool = True
     cache_ttl: int = 300
