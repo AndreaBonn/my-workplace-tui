@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Google Chat
     chat_poll_interval: int = 30
 
+    # Google account (email) — forces Google links to open with this account
+    google_account_email: str = ""
+
     # Google Calendar
     calendar_poll_interval: int = 300
 

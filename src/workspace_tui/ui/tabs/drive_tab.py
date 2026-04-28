@@ -433,16 +433,20 @@ class DriveTab(Vertical):
     # ── Actions ────────────────────────────────────────────────
 
     def action_open_selected(self) -> None:
-        import webbrowser
 
         if not self.selected_file:
             return
         fid = self.selected_file.file_id
+        from workspace_tui.utils.url_utils import open_google_url
+
         if self.selected_file.is_folder:
             url = f"https://drive.google.com/drive/folders/{fid}"
         else:
             url = f"https://drive.google.com/file/d/{fid}/view"
-        webbrowser.open(url)
+        account = (
+            getattr(self.app, "settings", None) and self.app.settings.google_account_email
+        ) or ""
+        open_google_url(url, google_account_email=account)
 
     def action_go_up(self) -> None:
         if self.current_view == VIEW_HOME:

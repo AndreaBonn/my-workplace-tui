@@ -1,4 +1,3 @@
-import webbrowser
 from itertools import groupby
 
 from textual.app import ComposeResult
@@ -105,6 +104,7 @@ class CalendarTab(Vertical):
         Binding("d", "delete_event", "Elimina", show=True),
         Binding("v", "toggle_view", "Cambia vista", show=True),
         Binding("o", "open_link", "Apri link", show=True),
+        Binding("g", "open_calendar_web", "Calendar web", show=True),
         Binding("n", "show_notes", "Note", show=True),
     ]
 
@@ -169,17 +169,30 @@ class CalendarTab(Vertical):
             return highlighted.event
         return None
 
+    @property
+    def _google_account(self) -> str:
+        return (
+            getattr(self.app, "settings", None) and self.app.settings.google_account_email
+        ) or ""
+
     def action_open_link(self) -> None:
         ev = self._selected_event
         if not ev:
             return
-        # Priorità: Meet link > html_link (Google Calendar)
+        from workspace_tui.utils.url_utils import open_google_url
+
         url = ev.meet_link or ev.html_link
         if url:
-            webbrowser.open(url)
+            open_google_url(url, google_account_email=self._google_account)
             self.app.notify(f"Aperto: {ev.summary}", timeout=2)
         else:
             self.app.notify("Nessun link per questo evento", severity="warning")
+
+    def action_open_calendar_web(self) -> None:
+        from workspace_tui.utils.url_utils import open_google_url
+
+        url = "https://calendar.google.com/calendar/r/week"
+        open_google_url(url, google_account_email=self._google_account)
 
     def action_show_notes(self) -> None:
         ev = self._selected_event
