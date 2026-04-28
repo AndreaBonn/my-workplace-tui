@@ -433,20 +433,16 @@ class DriveTab(Vertical):
     # ── Actions ────────────────────────────────────────────────
 
     def action_open_selected(self) -> None:
+        import webbrowser
+
         if not self.selected_file:
             return
+        fid = self.selected_file.file_id
         if self.selected_file.is_folder:
-            self.folder_stack = [
-                *self.folder_stack,
-                self.current_folder,
-            ]
-            self._load_files(self.selected_file.file_id)
-            self._update_breadcrumb(self.selected_file.name)
+            url = f"https://drive.google.com/drive/folders/{fid}"
         else:
-            import webbrowser
-
-            url = f"https://drive.google.com/file/d/{self.selected_file.file_id}/view"
-            webbrowser.open(url)
+            url = f"https://drive.google.com/file/d/{fid}/view"
+        webbrowser.open(url)
 
     def action_go_up(self) -> None:
         if self.current_view == VIEW_HOME:
