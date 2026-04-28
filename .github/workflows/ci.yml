@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
@@ -34,4 +37,62 @@ jobs:
         run: uv run ruff format --check src/ tests/
 
       - name: Run tests
-        run: uv run pytest --cov --cov-report=term-missing
+        run: uv run pytest tests/ -v --junitxml=test-results.xml --cov --cov-report=term-missing --cov-report=json
+
+      - name: Generate test badge
+        if: always()
+        run: |
+          uv run python -c "
+          import json, xml.etree.ElementTree as ET, os
+          if not os.path.exists('test-results.xml'):
+              badge = {'schemaVersion': 1, 'label': 'tests', 'message': 'error', 'color': 'red'}
+          else:
+              root = ET.parse('test-results.xml').getroot()
+              suites = root.findall('testsuite') if root.tag == 'testsuites' else [root]
+              tests = sum(int(s.attrib.get('tests', 0)) for s in suites)
+              failures = sum(int(s.attrib.get('failures', 0)) for s in suites)
+              errors = sum(int(s.attrib.get('errors', 0)) for s in suites)
+              passed = tests - failures - errors
+              if failures + errors > 0:
+                  badge = {'schemaVersion': 1, 'label': 'tests', 'message': f'{passed}/{tests} passed', 'color': 'red'}
+              else:
+                  badge = {'schemaVersion': 1, 'label': 'tests', 'message': f'{passed} passed', 'color': 'brightgreen'}
+          with open('badges/test-badge.json', 'w') as f:
+              json.dump(badge, f)
+          "
+
+      - name: Generate coverage badge
+        if: always()
+        run: |
+          uv run python -c "
+          import json, os
+          summary_path = 'coverage.json'
+          if not os.path.exists(summary_path):
+              badge = {'schemaVersion': 1, 'label': 'coverage', 'message': 'N/A', 'color': 'lightgrey'}
+          else:
+              with open(summary_path) as f:
+                  data = json.load(f)
+              pct = data['totals']['percent_covered_display']
+              pct_float = float(str(pct).rstrip('%'))
+              if pct_float >= 90:
+                  color = 'brightgreen'
+              elif pct_float >= 80:
+                  color = 'green'
+              elif pct_float >= 60:
+                  color = 'yellow'
+              else:
+                  color = 'red'
+              msg = f'{pct}%' if '%' not in str(pct) else str(pct)
+              badge = {'schemaVersion': 1, 'label': 'coverage', 'message': msg, 'color': color}
+          with open('badges/coverage-badge.json', 'w') as f:
+              json.dump(badge, f)
+          "
+
+      - name: Commit badges
+        if: always() && matrix.python-version == '3.12' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add badges/test-badge.json badges/coverage-badge.json
+          git diff --cached --quiet || git commit -m "ci: update badges [skip ci]"
+          git push

@@ -22,6 +22,7 @@ credentials/token.json
 htmlcov/
 .coverage
 coverage.xml
+coverage/
 
 # Linting and type checking
 .ruff_cache/

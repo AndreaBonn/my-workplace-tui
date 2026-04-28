@@ -4,8 +4,16 @@
 
 Terminal interface for Gmail, Google Chat, Google Calendar, Google Drive, and Jira.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<div align="center">
+
 [![CI](https://github.com/AndreaBonn/my-workplace-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/AndreaBonn/my-workplace-tui/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AndreaBonn/my-workplace-tui/main/badges/test-badge.json)](https://github.com/AndreaBonn/my-workplace-tui/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AndreaBonn/my-workplace-tui/main/badges/coverage-badge.json)](https://github.com/AndreaBonn/my-workplace-tui/actions/workflows/ci.yml)
+[![Ruff](https://img.shields.io/badge/linter-ruff-261230.svg)](https://docs.astral.sh/ruff/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Security](https://img.shields.io/badge/security-policy-green.svg)](SECURITY.md)
+
+</div>
 
 Workspace TUI is a keyboard-driven terminal application that provides unified access to Google Workspace services and Jira without leaving the terminal. It replaces browser tabs with a single tabbed interface for daily operations on email, chat, calendar, files, and issue tracking.
 
