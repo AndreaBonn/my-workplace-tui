@@ -1,0 +1,77 @@
+[project]
+name = "workspace-tui"
+version = "0.1.0"
+description = "TUI application for Gmail, Google Chat, Calendar, Drive and Jira"
+requires-python = ">=3.11"
+dependencies = [
+    "textual>=0.55.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.22.0",
+    "google-auth-oauthlib>=1.1.0",
+    "google-auth-httplib2>=0.1.1",
+    "html2text>=2020.1.16",
+    "python-dateutil>=2.8.2",
+    "pydantic-settings>=2.0.0",
+    "plyer>=2.1.0",
+    "loguru>=0.7.0",
+    "diskcache>=5.6.0",
+    "rich>=13.0.0",
+    "requests>=2.31.0",
+]
+
+[project.scripts]
+workspace-tui = "workspace_tui.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/workspace_tui"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--strict-markers -v"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "RUF",  # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/workspace_tui/app.py" = ["RUF012"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["workspace_tui"]
+
+[tool.coverage.run]
+source = ["src/workspace_tui"]
+omit = ["src/workspace_tui/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 30

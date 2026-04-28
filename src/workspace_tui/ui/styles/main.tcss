@@ -1,0 +1,36 @@
+Screen {
+    layout: vertical;
+}
+
+#header {
+    dock: top;
+    height: 1;
+    background: $primary;
+    color: $text;
+    text-style: bold;
+}
+
+#tab-content {
+    height: 1fr;
+}
+
+StatusBar {
+    dock: bottom;
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+}
+
+.tab-placeholder {
+    width: 1fr;
+    height: 1fr;
+    content-align: center middle;
+    color: $text-muted;
+}
+
+.disabled-tab {
+    width: 1fr;
+    height: 1fr;
+    content-align: center middle;
+    color: $warning;
+}
