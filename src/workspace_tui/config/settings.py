@@ -3,17 +3,21 @@ from pathlib import Path
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Project root: src/workspace_tui/config/settings.py → 3 levels up
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_ENV_FILE = _PROJECT_ROOT / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     # Google OAuth2
-    google_client_secret_path: Path = Path("credentials/client_secret.json")
-    google_token_path: Path = Path("credentials/token.json")
+    google_client_secret_path: Path = _PROJECT_ROOT / "credentials" / "client_secret.json"
+    google_token_path: Path = _PROJECT_ROOT / "credentials" / "token.json"
 
     # Gmail
     gmail_poll_interval: int = 60
