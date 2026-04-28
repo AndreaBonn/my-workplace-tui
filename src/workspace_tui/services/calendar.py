@@ -166,9 +166,11 @@ class CalendarService(BaseService):
         end = data.get("end", {})
         all_day = "date" in start
 
+        raw_summary = data.get("summary", "(senza titolo)")
+        logger.debug("Event raw summary: {!r}", raw_summary)
         return CalendarEvent(
             event_id=data.get("id", ""),
-            summary=data.get("summary", "(senza titolo)"),
+            summary=raw_summary,
             start=start.get("dateTime", start.get("date", "")),
             end=end.get("dateTime", end.get("date", "")),
             location=data.get("location", ""),
