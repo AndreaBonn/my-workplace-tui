@@ -9,6 +9,7 @@ from workspace_tui.services.gmail import EmailMessage, GmailLabel, GmailService
 from workspace_tui.ui.widgets.compose_modal import ComposeData, ComposeModal
 from workspace_tui.ui.widgets.email_list import EmailListView, EmailSelected
 from workspace_tui.ui.widgets.email_preview import EmailPreview
+from workspace_tui.utils.url_utils import open_google_url
 
 _FOLDER_ICONS = {
     "INBOX": "📥",
@@ -48,6 +49,9 @@ class GmailTab(Vertical):
         Binding("s", "toggle_star", "Stella", show=True),
         Binding("slash", "search", "Cerca", show=True),
         Binding("a", "download_attachment", "Scarica allegato", show=True),
+        Binding("t", "view_thread", "Thread", show=True),
+        Binding("o", "open_in_browser", "Apri browser", show=True),
+        Binding("g", "open_gmail", "Gmail web", show=True),
     ]
 
     gmail_service: reactive[GmailService | None] = reactive(None, init=False)
@@ -141,6 +145,7 @@ class GmailTab(Vertical):
     def _update_preview(self, msg: EmailMessage) -> None:
         self.selected_message = msg
         preview = self.query_one("#email-preview", EmailPreview)
+        preview.clear_thread()
         preview.message = msg
 
     def action_compose(self) -> None:
@@ -273,3 +278,46 @@ class GmailTab(Vertical):
             self.app.notify("Nessun allegato", severity="warning")
             return
         self.app.notify(f"{len(msg.attachments)} allegati disponibili", timeout=3)
+
+    def _get_account_email(self) -> str:
+        return (
+            getattr(self.app, "settings", None) and self.app.settings.google_account_email
+        ) or ""
+
+    def action_open_gmail(self) -> None:
+        """Open Gmail web interface in browser with configured account."""
+        email = self._get_account_email()
+        url = "https://mail.google.com/mail/"
+        open_google_url(url, google_account_email=email)
+        self.app.notify("Gmail aperta nel browser", timeout=2)
+
+    def action_open_in_browser(self) -> None:
+        """Open the selected email/thread in browser."""
+        msg = self.selected_message
+        if not msg:
+            self.app.notify("Seleziona un'email", severity="warning")
+            return
+        email = self._get_account_email()
+        url = f"https://mail.google.com/mail/#all/{msg.thread_id}"
+        open_google_url(url, google_account_email=email)
+        self.app.notify("Email aperta nel browser", timeout=2)
+
+    def action_view_thread(self) -> None:
+        """Load and display all messages in the thread chronologically."""
+        msg = self.selected_message
+        if not msg or not self.gmail_service:
+            self.app.notify("Seleziona un'email", severity="warning")
+            return
+        self.app.run_worker(lambda: self._load_thread_worker(msg.thread_id), thread=True)
+
+    def _load_thread_worker(self, thread_id: str) -> None:
+        if not self.gmail_service:
+            return
+        messages = self.gmail_service.get_thread_messages(thread_id)
+        self.app.call_from_thread(self._show_thread, messages)
+
+    def _show_thread(self, messages: list[EmailMessage]) -> None:
+        preview = self.query_one("#email-preview", EmailPreview)
+        preview.show_thread(messages)
+        count = len(messages)
+        self.app.notify(f"Thread: {count} messaggi", timeout=2)

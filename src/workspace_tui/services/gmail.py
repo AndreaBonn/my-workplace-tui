@@ -250,6 +250,30 @@ class GmailService(BaseService):
     def archive_message(self, message_id: str) -> None:
         self.modify_message(message_id, remove_labels=["INBOX"])
 
+    def get_thread_messages(self, thread_id: str) -> list[EmailMessage]:
+        """Fetch all messages in a thread, sorted chronologically (oldest first)."""
+        cache_key = f"{CACHE_PREFIX}thread:{thread_id}"
+
+        def fetch():
+            result = self._retry(
+                lambda: (
+                    self._service.users()
+                    .threads()
+                    .get(userId="me", id=thread_id, format="full")
+                    .execute()
+                )
+            )
+            messages = []
+            for msg_data in result.get("messages", []):
+                try:
+                    msg = self._parse_message(msg_data, include_body=True)
+                    messages.append(msg)
+                except Exception as exc:
+                    logger.warning("Failed to parse thread message: {}", exc)
+            return messages
+
+        return self._cached(cache_key, ttl=TTL_MESSAGE_DETAIL, fetch=fetch)
+
     def get_attachment(self, message_id: str, attachment_id: str) -> bytes:
         result = self._retry(
             lambda: (
