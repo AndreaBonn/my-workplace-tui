@@ -15,6 +15,8 @@ from workspace_tui.utils.date_utils import (
     parse_date,
 )
 
+PERIOD_DAYS = {"agenda": 30, "settimana": 7, "mese": 30}
+
 LINE_W = 60
 
 
@@ -111,6 +113,7 @@ class CalendarTab(Vertical):
     calendar_service: reactive[CalendarService | None] = reactive(None, init=False)
     events: reactive[list[CalendarEvent]] = reactive(list, init=False)
     current_view: reactive[str] = reactive("agenda")
+    _period_offset: int = 0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="calendar-layout"):
@@ -132,7 +135,13 @@ class CalendarTab(Vertical):
     def _load_events_worker(self) -> None:
         if not self.calendar_service:
             return
-        events = self.calendar_service.list_events()
+        from datetime import datetime, timedelta
+
+        days = PERIOD_DAYS.get(self.current_view, 30)
+        offset_days = self._period_offset * days
+        time_min = datetime.now() + timedelta(days=offset_days)
+        time_max = time_min + timedelta(days=days)
+        events = self.calendar_service.list_events(time_min=time_min, time_max=time_max)
         self.app.call_from_thread(self._render_events, events)
 
     def _render_events(self, events: list[CalendarEvent]) -> None:
@@ -212,12 +221,15 @@ class CalendarTab(Vertical):
             self.app.notify("Nessuna nota per questo evento", severity="warning")
 
     def action_prev_period(self) -> None:
-        self.app.notify("Periodo precedente", timeout=2)
+        self._period_offset -= 1
+        self._load_events()
 
     def action_next_period(self) -> None:
-        self.app.notify("Periodo successivo", timeout=2)
+        self._period_offset += 1
+        self._load_events()
 
     def action_go_today(self) -> None:
+        self._period_offset = 0
         self._load_events()
 
     def action_create_event(self) -> None:
@@ -321,6 +333,8 @@ class CalendarTab(Vertical):
         views = ["agenda", "settimana", "mese"]
         idx = views.index(self.current_view)
         self.current_view = views[(idx + 1) % len(views)]
+        self._period_offset = 0
+        self._load_events()
         labels = {
             "agenda": "[Agenda]  Settimana  Mese",
             "settimana": "Agenda  [Settimana]  Mese",
