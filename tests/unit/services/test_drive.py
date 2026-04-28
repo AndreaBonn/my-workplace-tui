@@ -118,3 +118,29 @@ class TestParseFile:
         data = {"id": "f1", "name": "Orphan.txt", "mimeType": "text/plain"}
         file = drive_service._parse_file(data)
         assert file.owner == ""
+
+
+class TestListSharedDrives:
+    def test_returns_shared_drives(self, drive_service, mock_api):
+        mock_api.drives().list().execute.return_value = {
+            "drives": [
+                {"id": "sd1", "name": "Engineering"},
+                {"id": "sd2", "name": "Marketing"},
+            ]
+        }
+        drives = drive_service.list_shared_drives()
+        assert len(drives) == 2
+        assert drives[0].drive_id == "sd1"
+        assert drives[0].name == "Engineering"
+        assert drives[1].drive_id == "sd2"
+        assert drives[1].name == "Marketing"
+
+    def test_returns_empty_when_no_shared_drives(self, drive_service, mock_api):
+        mock_api.drives().list().execute.return_value = {"drives": []}
+        drives = drive_service.list_shared_drives()
+        assert drives == []
+
+    def test_returns_empty_when_no_drives_key(self, drive_service, mock_api):
+        mock_api.drives().list().execute.return_value = {}
+        drives = drive_service.list_shared_drives()
+        assert drives == []

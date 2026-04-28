@@ -29,6 +29,12 @@ MIME_ICONS = {
 
 
 @dataclass
+class SharedDrive:
+    drive_id: str
+    name: str
+
+
+@dataclass
 class DriveFile:
     file_id: str
     name: str
@@ -45,6 +51,25 @@ class DriveService(BaseService):
         super().__init__(cache=cache)
         self._service = build("drive", "v3", credentials=credentials)
         self._credentials = credentials
+
+    def list_shared_drives(self) -> list[SharedDrive]:
+        cache_key = f"{CACHE_PREFIX}shared_drives"
+
+        def fetch():
+            result = self._retry(
+                lambda: (
+                    self._service.drives().list(pageSize=100, fields="drives(id, name)").execute()
+                )
+            )
+            return [
+                SharedDrive(
+                    drive_id=d["id"],
+                    name=d["name"],
+                )
+                for d in result.get("drives", [])
+            ]
+
+        return self._cached(cache_key, ttl=TTL_FILE_LIST, fetch=fetch)
 
     def list_files(
         self,
@@ -65,11 +90,13 @@ class DriveService(BaseService):
                 q_parts.append(f"name contains '{sanitized_query}'")
             q = " and ".join(q_parts)
 
-            params = {
+            params: dict = {
                 "q": q,
                 "pageSize": max_results,
-                "fields": "nextPageToken, files(id, name, mimeType, size, modifiedTime, owners)",
+                "fields": ("nextPageToken, files(id, name, mimeType, size, modifiedTime, owners)"),
                 "orderBy": "folder, name",
+                "supportsAllDrives": True,
+                "includeItemsFromAllDrives": True,
             }
             if page_token:
                 params["pageToken"] = page_token
@@ -93,6 +120,8 @@ class DriveService(BaseService):
                         fields="files(id, name, mimeType, size, modifiedTime, owners)",
                         orderBy="modifiedTime desc",
                         q="trashed = false",
+                        supportsAllDrives=True,
+                        includeItemsFromAllDrives=True,
                     )
                     .execute()
                 )
@@ -113,6 +142,8 @@ class DriveService(BaseService):
                         fields="files(id, name, mimeType, size, modifiedTime, owners)",
                         orderBy="modifiedTime desc",
                         q="sharedWithMe = true and trashed = false",
+                        supportsAllDrives=True,
+                        includeItemsFromAllDrives=True,
                     )
                     .execute()
                 )
@@ -131,6 +162,7 @@ class DriveService(BaseService):
                     .get(
                         fileId=file_id,
                         fields="id, name, mimeType, size, modifiedTime, owners",
+                        supportsAllDrives=True,
                     )
                     .execute()
                 )
