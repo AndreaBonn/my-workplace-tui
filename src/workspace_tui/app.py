@@ -117,6 +117,7 @@ class WorkspaceTUI(App):
                     username=self.settings.jira_username,
                     api_token=self.settings.jira_api_token,
                     base_url=self.settings.jira_base_url,
+                    allow_http=self.settings.jira_allow_http,
                 )
                 self._jira_service = JiraService(session=session, cache=self._cache)
                 self.app.call_from_thread(self._wire_jira_service)

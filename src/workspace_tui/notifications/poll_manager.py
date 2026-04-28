@@ -13,6 +13,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from workspace_tui.notifications.notifier import Notifier
+    from workspace_tui.services.calendar import CalendarService
+    from workspace_tui.services.chat import ChatService
+    from workspace_tui.services.gmail import GmailService
+    from workspace_tui.services.jira import JiraService
 
 
 @dataclass
@@ -64,12 +68,12 @@ class PollManager:
         self._on_update = on_update
         self._state = PollState()
         self._stop = threading.Event()
-        self._timers: list[threading.Timer] = []
+        self._timers: list[list[threading.Timer]] = []
 
-        self._gmail_service = None
-        self._calendar_service = None
-        self._chat_service = None
-        self._jira_service = None
+        self._gmail_service: GmailService | None = None
+        self._calendar_service: CalendarService | None = None
+        self._chat_service: ChatService | None = None
+        self._jira_service: JiraService | None = None
 
         self._gmail_interval = 60
         self._calendar_interval = 300
@@ -79,10 +83,10 @@ class PollManager:
     def configure(
         self,
         *,
-        gmail_service=None,
-        calendar_service=None,
-        chat_service=None,
-        jira_service=None,
+        gmail_service: GmailService | None = None,
+        calendar_service: CalendarService | None = None,
+        chat_service: ChatService | None = None,
+        jira_service: JiraService | None = None,
         gmail_interval: int = 60,
         calendar_interval: int = 300,
         chat_interval: int = 30,
@@ -111,12 +115,15 @@ class PollManager:
 
     def stop(self) -> None:
         self._stop.set()
-        for timer in self._timers:
-            timer.cancel()
+        for slot in self._timers:
+            for timer in slot:
+                timer.cancel()
         self._timers.clear()
         logger.info("PollManager stopped")
 
     def _schedule(self, target: Callable[[], None], interval: int) -> None:
+        active_timer: list[threading.Timer] = []
+
         def loop() -> None:
             if self._stop.is_set():
                 return
@@ -127,12 +134,14 @@ class PollManager:
             if not self._stop.is_set():
                 timer = threading.Timer(interval, loop)
                 timer.daemon = True
-                self._timers.append(timer)
+                active_timer.clear()
+                active_timer.append(timer)
                 timer.start()
 
         timer = threading.Timer(interval, loop)
         timer.daemon = True
-        self._timers.append(timer)
+        active_timer.append(timer)
+        self._timers.append(active_timer)
         timer.start()
 
     def _poll_gmail(self) -> None:

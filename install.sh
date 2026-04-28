@@ -2,7 +2,8 @@
 set -euo pipefail
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_LINK="/usr/local/bin/workspace-tui"
+BIN_DIR="${HOME}/.local/bin"
+BIN_LINK="${BIN_DIR}/workspace-tui"
 REQUIRED_PYTHON_MINOR=11
 
 echo "=== Workspace TUI — Installazione ==="
@@ -25,9 +26,9 @@ echo "[OK] Python ${PYTHON_VERSION}"
 
 # Check uv
 if ! command -v uv &> /dev/null; then
-    echo "Installazione uv..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.local/bin:$PATH"
+    echo "Errore: uv non trovato."
+    echo "Installa uv prima di procedere: https://docs.astral.sh/uv/getting-started/installation/"
+    exit 1
 fi
 echo "[OK] uv $(uv --version)"
 
@@ -59,10 +60,16 @@ cd \"${INSTALL_DIR}\"
 exec uv run python -m workspace_tui \"\$@\"
 "
 
-echo "Creazione launcher in ${BIN_LINK} (richiede sudo)..."
-echo "$LAUNCHER_CONTENT" | sudo tee "$BIN_LINK" > /dev/null
-sudo chmod +x "$BIN_LINK"
-echo "[OK] Comando 'workspace-tui' disponibile globalmente"
+mkdir -p "$BIN_DIR"
+echo "$LAUNCHER_CONTENT" > "$BIN_LINK"
+chmod +x "$BIN_LINK"
+echo "[OK] Comando 'workspace-tui' installato in ${BIN_LINK}"
+
+if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
+    echo ""
+    echo "⚠  ${BIN_DIR} non è nel PATH."
+    echo "   Aggiungi al tuo .bashrc/.zshrc:  export PATH=\"\${HOME}/.local/bin:\${PATH}\""
+fi
 
 echo ""
 echo "=== Installazione completata ==="
