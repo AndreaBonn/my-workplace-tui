@@ -1,3 +1,4 @@
+import threading
 import time
 from collections.abc import Callable
 from typing import TypeVar
@@ -28,6 +29,7 @@ class BaseService:
 
     def __init__(self, cache: CacheManager) -> None:
         self._cache = cache
+        self._api_lock = threading.Lock()
 
     def _retry(
         self,
@@ -56,7 +58,8 @@ class BaseService:
 
         for attempt in range(max_retries + 1):
             try:
-                return operation()
+                with self._api_lock:
+                    return operation()
             except Exception as exc:
                 last_exception = exc
                 error = self._categorize_error(exc)
