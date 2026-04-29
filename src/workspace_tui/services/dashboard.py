@@ -53,8 +53,12 @@ class DashboardMetrics:
     gmail_unread: int = 0
     meetings_today_remaining: int = 0
     meetings_today_total: int = 0
+    meetings_today_done_seconds: int = 0
+    meetings_today_total_seconds: int = 0
     meetings_week_remaining: int = 0
     meetings_week_total: int = 0
+    meetings_week_done_seconds: int = 0
+    meetings_week_total_seconds: int = 0
 
     # Meta
     jira_available: bool = False
@@ -85,6 +89,41 @@ STATUS_CATEGORY_MAP = {
     "In Progress": "in_progress",
     "Done": "done",
 }
+
+
+def _parse_event_time(iso_str: str) -> datetime | None:
+    """Parse an ISO datetime string to a timezone-aware datetime."""
+    if not iso_str or len(iso_str) <= 10:
+        return None
+    try:
+        return datetime.fromisoformat(iso_str)
+    except ValueError:
+        return None
+
+
+def _event_duration_seconds(event) -> int:
+    """Return event duration in seconds, 0 if unparseable."""
+    start = _parse_event_time(event.start)
+    end = _parse_event_time(event.end)
+    if not start or not end:
+        return 0
+    delta = (end - start).total_seconds()
+    return int(max(delta, 0))
+
+
+def _meeting_duration_seconds(
+    meetings: list,
+    now_iso: str,
+) -> tuple[int, int]:
+    """Return (done_seconds, total_seconds) for a list of meetings."""
+    done = 0
+    total = 0
+    for event in meetings:
+        duration = _event_duration_seconds(event)
+        total += duration
+        if event.end <= now_iso:
+            done += duration
+    return done, total
 
 
 def _is_meeting(event) -> bool:
@@ -183,11 +222,9 @@ class DashboardService:
         week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        jql = (
-            f"worklogDate >= '{week_start.strftime('%Y-%m-%d')}' "
-            "AND worklogAuthor = currentUser() "
-            "ORDER BY updated DESC"
-        )
+        week_str = week_start.strftime("%Y-%m-%d")
+        today_str = today_start.strftime("%Y-%m-%d")
+        jql = f"worklogDate >= '{week_str}' ORDER BY updated DESC"
         issues, _ = self._jira.search_issues(jql=jql, max_results=50)
 
         logged_today = 0
@@ -196,29 +233,34 @@ class DashboardService:
         worklogs: list[WorklogEntry] = []
 
         for issue in issues:
-            estimated_week += issue.estimate_seconds
-
             try:
                 issue_worklogs = self._jira.get_worklogs(issue.key)
             except Exception:
                 continue
 
+            has_user_worklog = False
             for wl in issue_worklogs:
-                wl_date = wl.started[:10] if wl.started else ""
-                if not wl_date:
+                if not self._is_current_user_worklog(wl):
                     continue
 
-                if wl_date >= week_start.strftime("%Y-%m-%d"):
-                    logged_week += wl.time_spent_seconds
-                    worklogs.append(
-                        WorklogEntry(
-                            date=wl_date,
-                            seconds=wl.time_spent_seconds,
-                            issue_key=issue.key,
-                        )
+                wl_date = wl.started[:10] if wl.started else ""
+                if not wl_date or wl_date < week_str:
+                    continue
+
+                has_user_worklog = True
+                logged_week += wl.time_spent_seconds
+                worklogs.append(
+                    WorklogEntry(
+                        date=wl_date,
+                        seconds=wl.time_spent_seconds,
+                        issue_key=issue.key,
                     )
-                    if wl_date >= today_start.strftime("%Y-%m-%d"):
-                        logged_today += wl.time_spent_seconds
+                )
+                if wl_date >= today_str:
+                    logged_today += wl.time_spent_seconds
+
+            if has_user_worklog:
+                estimated_week += issue.estimate_seconds
 
         return {
             "logged_today": logged_today,
@@ -226,6 +268,12 @@ class DashboardService:
             "estimated_week": estimated_week,
             "worklogs": worklogs,
         }
+
+    def _is_current_user_worklog(self, worklog) -> bool:
+        """Check if a worklog belongs to the current user."""
+        if not self._jira_account_id:
+            return True
+        return worklog.author_account_id == self._jira_account_id
 
     def _collect_gmail(self) -> dict:
         labels = self._gmail.list_labels()
@@ -256,11 +304,24 @@ class DashboardService:
         week_meetings = [e for e in week_events if _is_meeting(e)]
         now_iso = now.isoformat()
 
+        today_done, today_total = _meeting_duration_seconds(
+            today_meetings,
+            now_iso,
+        )
+        week_done, week_total = _meeting_duration_seconds(
+            week_meetings,
+            now_iso,
+        )
+
         return {
             "meetings_today_remaining": sum(1 for e in today_meetings if e.start > now_iso),
             "meetings_today_total": len(today_meetings),
+            "meetings_today_done_seconds": today_done,
+            "meetings_today_total_seconds": today_total,
             "meetings_week_remaining": sum(1 for e in week_meetings if e.start > now_iso),
             "meetings_week_total": len(week_meetings),
+            "meetings_week_done_seconds": week_done,
+            "meetings_week_total_seconds": week_total,
         }
 
     def _merge_jira_tasks(self, metrics: DashboardMetrics, data: dict) -> None:
@@ -288,5 +349,9 @@ class DashboardService:
             return
         metrics.meetings_today_remaining = data["meetings_today_remaining"]
         metrics.meetings_today_total = data["meetings_today_total"]
+        metrics.meetings_today_done_seconds = data["meetings_today_done_seconds"]
+        metrics.meetings_today_total_seconds = data["meetings_today_total_seconds"]
         metrics.meetings_week_remaining = data["meetings_week_remaining"]
         metrics.meetings_week_total = data["meetings_week_total"]
+        metrics.meetings_week_done_seconds = data["meetings_week_done_seconds"]
+        metrics.meetings_week_total_seconds = data["meetings_week_total_seconds"]

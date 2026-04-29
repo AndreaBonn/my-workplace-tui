@@ -49,6 +49,7 @@ class JiraComment:
 class JiraWorklog:
     worklog_id: str
     author: str
+    author_account_id: str
     time_spent: str
     time_spent_seconds: int
     started: str
@@ -160,6 +161,7 @@ class JiraService(BaseService):
                 JiraWorklog(
                     worklog_id=w["id"],
                     author=w.get("author", {}).get("displayName", ""),
+                    author_account_id=w.get("author", {}).get("accountId", ""),
                     time_spent=w.get("timeSpent", ""),
                     time_spent_seconds=w.get("timeSpentSeconds", 0),
                     started=w.get("started", ""),

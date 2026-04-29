@@ -161,13 +161,34 @@ class DashboardTab(Vertical):
         self.query_one("#dash-weekly-chart", Static).update("")
         self.query_one("#dash-tasks", Static).update("")
 
+        today_cnt = f"{metrics.meetings_today_remaining}/{metrics.meetings_today_total}"
+        today_bar = _progress_bar(
+            metrics.meetings_today_done_seconds,
+            metrics.meetings_today_total_seconds,
+            width=12,
+        )
+        today_hrs = (
+            f"{_fmt_hours(metrics.meetings_today_done_seconds)}"
+            f" / {_fmt_hours(metrics.meetings_today_total_seconds)}"
+        )
+        week_cnt = f"{metrics.meetings_week_remaining}/{metrics.meetings_week_total}"
+        week_bar = _progress_bar(
+            metrics.meetings_week_done_seconds,
+            metrics.meetings_week_total_seconds,
+            width=12,
+        )
+        week_hrs = (
+            f"{_fmt_hours(metrics.meetings_week_done_seconds)}"
+            f" / {_fmt_hours(metrics.meetings_week_total_seconds)}"
+        )
         lines = [
             "⚡ Quick Stats",
             "",
             f"  📧 Email non lette: {metrics.gmail_unread}",
-            f"  📅 Meeting oggi: {metrics.meetings_today_remaining}/{metrics.meetings_today_total}",
-            f"  📅 Meeting settimana: "
-            f"{metrics.meetings_week_remaining}/{metrics.meetings_week_total}",
+            f"  📅 Meeting oggi: {today_cnt}  {today_bar}",
+            f"     {today_hrs}",
+            f"  📅 Meeting settimana: {week_cnt}  {week_bar}",
+            f"     {week_hrs}",
             "",
             "  ─────────────────────────────────",
             "",
@@ -229,10 +250,32 @@ class DashboardTab(Vertical):
 
         lines = ["⚡ Quick Stats", ""]
         lines.append(f"  📧 Email non lette: {metrics.gmail_unread}")
-        today = f"{metrics.meetings_today_remaining}/{metrics.meetings_today_total}"
-        week = f"{metrics.meetings_week_remaining}/{metrics.meetings_week_total}"
-        lines.append(f"  📅 Meeting oggi: {today}")
-        lines.append(f"  📅 Meeting settimana: {week}")
+
+        today_cnt = f"{metrics.meetings_today_remaining}/{metrics.meetings_today_total}"
+        today_bar = _progress_bar(
+            metrics.meetings_today_done_seconds,
+            metrics.meetings_today_total_seconds,
+            width=12,
+        )
+        today_hrs = (
+            f"{_fmt_hours(metrics.meetings_today_done_seconds)}"
+            f" / {_fmt_hours(metrics.meetings_today_total_seconds)}"
+        )
+        lines.append(f"  📅 Meeting oggi: {today_cnt}  {today_bar}")
+        lines.append(f"     {today_hrs}")
+
+        week_cnt = f"{metrics.meetings_week_remaining}/{metrics.meetings_week_total}"
+        week_bar = _progress_bar(
+            metrics.meetings_week_done_seconds,
+            metrics.meetings_week_total_seconds,
+            width=12,
+        )
+        week_hrs = (
+            f"{_fmt_hours(metrics.meetings_week_done_seconds)}"
+            f" / {_fmt_hours(metrics.meetings_week_total_seconds)}"
+        )
+        lines.append(f"  📅 Meeting settimana: {week_cnt}  {week_bar}")
+        lines.append(f"     {week_hrs}")
 
         if metrics.jira_available:
             lines.append(f"  🎫 Task assegnati: {metrics.open_tasks}")

@@ -7,7 +7,9 @@ from workspace_tui.services.calendar import CalendarEvent
 from workspace_tui.services.dashboard import (
     DashboardMetrics,
     DashboardService,
+    _event_duration_seconds,
     _is_meeting,
+    _meeting_duration_seconds,
 )
 from workspace_tui.services.gmail import GmailLabel
 from workspace_tui.services.jira import JiraIssue, JiraWorklog
@@ -47,6 +49,7 @@ def _make_worklog(
     return JiraWorklog(
         worklog_id="wl1",
         author="Alice",
+        author_account_id="alice-123",
         time_spent="1h",
         time_spent_seconds=seconds,
         started=started,
@@ -323,3 +326,94 @@ class TestMeetingFilter:
         assert metrics.meetings_today_remaining == 1
         assert metrics.meetings_week_total == 3
         assert metrics.meetings_week_remaining == 1
+
+
+class TestMeetingDuration:
+    def test_event_duration_one_hour(self):
+        event = _make_event(
+            start="2026-04-29T10:00:00Z",
+            end="2026-04-29T11:00:00Z",
+        )
+        assert _event_duration_seconds(event) == 3600
+
+    def test_event_duration_30_minutes(self):
+        event = _make_event(
+            start="2026-04-29T14:00:00Z",
+            end="2026-04-29T14:30:00Z",
+        )
+        assert _event_duration_seconds(event) == 1800
+
+    def test_event_duration_all_day_returns_zero(self):
+        event = _make_event(start="2026-04-29", end="2026-04-30")
+        assert _event_duration_seconds(event) == 0
+
+    def test_meeting_duration_all_past(self):
+        meetings = [
+            _make_event(
+                meet_link="https://meet.google.com/abc",
+                start="2000-01-01T09:00:00Z",
+                end="2000-01-01T10:00:00Z",
+            ),
+            _make_event(
+                meet_link="https://zoom.us/j/123",
+                start="2000-01-01T10:00:00Z",
+                end="2000-01-01T10:30:00Z",
+            ),
+        ]
+        done, total = _meeting_duration_seconds(meetings, now_iso="2026-01-01T00:00:00+00:00")
+        assert total == 5400
+        assert done == 5400
+
+    def test_meeting_duration_all_future(self):
+        meetings = [
+            _make_event(
+                meet_link="https://meet.google.com/abc",
+                start="2099-01-01T09:00:00Z",
+                end="2099-01-01T10:00:00Z",
+            ),
+        ]
+        done, total = _meeting_duration_seconds(meetings, now_iso="2026-01-01T00:00:00+00:00")
+        assert total == 3600
+        assert done == 0
+
+    def test_meeting_duration_mixed_past_future(self):
+        meetings = [
+            _make_event(
+                meet_link="https://meet.google.com/abc",
+                start="2000-01-01T09:00:00Z",
+                end="2000-01-01T10:00:00Z",
+            ),
+            _make_event(
+                meet_link="https://zoom.us/j/123",
+                start="2099-01-01T09:00:00Z",
+                end="2099-01-01T10:00:00Z",
+            ),
+        ]
+        done, total = _meeting_duration_seconds(meetings, now_iso="2026-01-01T00:00:00+00:00")
+        assert total == 7200
+        assert done == 3600
+
+    def test_meeting_duration_empty_list(self):
+        done, total = _meeting_duration_seconds([], now_iso="2026-01-01T00:00:00+00:00")
+        assert total == 0
+        assert done == 0
+
+    def test_dashboard_reports_meeting_seconds(self):
+        cal = MagicMock()
+        cal.list_events.return_value = [
+            _make_event(
+                meet_link="https://meet.google.com/abc",
+                start="2000-01-01T09:00:00Z",
+                end="2000-01-01T10:00:00Z",
+            ),
+            _make_event(
+                meet_link="https://zoom.us/j/123",
+                start="2099-06-15T14:00:00Z",
+                end="2099-06-15T15:00:00Z",
+            ),
+        ]
+        svc = DashboardService(calendar_service=cal)
+        metrics = svc.collect()
+
+        assert metrics.meetings_today_total_seconds == 7200
+        assert metrics.meetings_today_done_seconds == 3600
