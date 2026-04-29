@@ -246,3 +246,54 @@ StatusBar {
 #chat-conversation {
     width: 70%;
 }
+
+#search-input {
+    height: 1;
+    border: none;
+    margin: 0;
+    padding: 0 1;
+    background: $surface;
+}
+
+#search-input:focus {
+    background: $primary 20%;
+}
+
+#search-layout {
+    height: 1fr;
+}
+
+#search-results-panel {
+    width: 50%;
+    border-right: solid $accent;
+}
+
+#search-preview-panel {
+    width: 50%;
+    padding: 1 2;
+}
+
+#search-results > SearchResultItem {
+    height: auto;
+    min-height: 3;
+    padding: 0;
+}
+
+#search-results > SearchResultItem:hover {
+    background: $primary 15%;
+}
+
+#search-results > SourceHeader {
+    height: 1;
+    background: transparent;
+}
+
+#search-preview {
+    padding: 1;
+    height: 1fr;
+}
+
+#search-errors {
+    padding: 1;
+    color: $warning;
+}

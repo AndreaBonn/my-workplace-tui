@@ -17,11 +17,13 @@ from workspace_tui.services.drive import DriveService
 from workspace_tui.services.errors import ConfigurationError
 from workspace_tui.services.gmail import GmailService
 from workspace_tui.services.jira import JiraService
+from workspace_tui.services.search import SearchService
 from workspace_tui.ui.tabs.calendar_tab import CalendarTab
 from workspace_tui.ui.tabs.chat_tab import ChatTab
 from workspace_tui.ui.tabs.drive_tab import DriveTab
 from workspace_tui.ui.tabs.gmail_tab import GmailTab
 from workspace_tui.ui.tabs.jira_tab import JiraTab
+from workspace_tui.ui.tabs.search_tab import SearchTab
 from workspace_tui.ui.widgets.status_bar import StatusBar
 from workspace_tui.ui.widgets.wrapping_footer import WrappingFooter
 
@@ -39,6 +41,7 @@ class WorkspaceTUI(App):
         Binding("3", "switch_tab('calendar')", "Calendar", show=True),
         Binding("4", "switch_tab('drive')", "Drive", show=True),
         Binding("5", "switch_tab('jira')", "Jira", show=True),
+        Binding("6", "switch_tab('search')", "Search", show=True),
         Binding("q", "request_quit", "Esci", show=True),
         Binding("question_mark", "show_help", "Help", show=True),
         Binding("r", "reload_tab", "Ricarica", show=True),
@@ -58,6 +61,7 @@ class WorkspaceTUI(App):
         self._drive_service: DriveService | None = None
         self._chat_service: ChatService | None = None
         self._jira_service: JiraService | None = None
+        self._search_service: SearchService | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -78,6 +82,8 @@ class WorkspaceTUI(App):
                     enabled=self.settings.jira_configured,
                     settings=self.settings,
                 )
+            with TabPane("[6] Search", id="search"):
+                yield SearchTab()
         yield StatusBar()
         yield WrappingFooter()
 
@@ -168,11 +174,22 @@ class WorkspaceTUI(App):
             self.query_one(DriveTab).set_service(self._drive_service)
         if self._chat_service:
             self.query_one(ChatTab).set_service(self._chat_service)
+        self._wire_search_service()
 
     def _wire_jira_service(self) -> None:
         if self._jira_service:
             self.query_one(JiraTab).set_service(self._jira_service)
             self.query_one(StatusBar).jira_count = 0
+        self._wire_search_service()
+
+    def _wire_search_service(self) -> None:
+        self._search_service = SearchService(
+            gmail_service=self._gmail_service,
+            jira_service=self._jira_service,
+            drive_service=self._drive_service,
+            chat_service=self._chat_service,
+        )
+        self.query_one(SearchTab).set_service(self._search_service)
 
     def action_switch_tab(self, tab_id: str) -> None:
         tabbed_content = self.query_one(TabbedContent)
@@ -185,7 +202,7 @@ class WorkspaceTUI(App):
 
     def action_show_help(self) -> None:
         self.notify(
-            "1-5: Cambia tab │ Tab/S-Tab: Pannello │ r: Ricarica │ q: Esci │ ?: Help",
+            "1-6: Cambia tab │ Tab/S-Tab: Pannello │ r: Ricarica │ q: Esci │ ?: Help",
             title="Shortcut",
             timeout=5,
         )
@@ -207,4 +224,6 @@ class WorkspaceTUI(App):
         elif active == "jira" and self._jira_service:
             self._cache.invalidate_prefix("jira:")
             self.query_one(JiraTab).reload()
+        elif active == "search" and self._search_service:
+            self.query_one(SearchTab).reload()
         self.notify("Ricarica dati...", timeout=2)
