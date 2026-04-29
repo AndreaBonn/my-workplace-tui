@@ -110,7 +110,7 @@ class JiraService(BaseService):
                 "sprint,description,created,updated,timeestimate,"
                 "timespent,labels,subtasks,issuelinks",
             }
-            data = self._request("GET", "/search/jql", params=params)
+            data = self._request("GET", "/search", params=params)
             issues = [self._parse_issue(item) for item in data.get("issues", [])]
             total = data.get("total", 0)
             return issues, total

@@ -225,11 +225,7 @@ class DashboardService:
         week_str = week_start.strftime("%Y-%m-%d")
         today_str = today_start.strftime("%Y-%m-%d")
 
-        if self._jira_account_id:
-            author_filter = f"worklogAuthor = '{self._jira_account_id}'"
-        else:
-            author_filter = "assignee = currentUser()"
-        jql = f"worklogDate >= '{week_str}' AND {author_filter} ORDER BY updated DESC"
+        jql = f"worklogDate >= '{week_str}' AND worklogAuthor = currentUser() ORDER BY updated DESC"
         issues, _ = self._jira.search_issues(jql=jql, max_results=50)
 
         logged_today = 0
