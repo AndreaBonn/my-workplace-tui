@@ -146,19 +146,39 @@ class DashboardTab(Vertical):
         self.query_one("#dash-time-tracking", Static).update(f"❌ Errore: {message}")
 
     def _render_metrics(self, metrics: DashboardMetrics) -> None:
+        if not metrics.jira_available:
+            self._render_no_jira(metrics)
+            return
         self._render_time_tracking(metrics)
         self._render_weekly_chart(metrics)
         self._render_tasks(metrics)
         self._render_quick_stats(metrics)
         self._render_errors(metrics)
 
+    def _render_no_jira(self, metrics: DashboardMetrics) -> None:
+        """Render compact layout when Jira is not configured."""
+        self.query_one("#dash-time-tracking", Static).update("")
+        self.query_one("#dash-weekly-chart", Static).update("")
+        self.query_one("#dash-tasks", Static).update("")
+
+        lines = [
+            "⚡ Quick Stats",
+            "",
+            f"  📧 Email non lette: {metrics.gmail_unread}",
+            f"  📅 Meeting oggi: {metrics.meetings_today_remaining}/{metrics.meetings_today_total}",
+            f"  📅 Meeting settimana: "
+            f"{metrics.meetings_week_remaining}/{metrics.meetings_week_total}",
+            "",
+            "  ─────────────────────────────────",
+            "",
+            "  Configura JIRA_USERNAME, JIRA_API_TOKEN,",
+            "     JIRA_BASE_URL in .env per time tracking e task",
+        ]
+        self.query_one("#dash-quick-stats", Static).update("\n".join(lines))
+        self._render_errors(metrics)
+
     def _render_time_tracking(self, metrics: DashboardMetrics) -> None:
         widget = self.query_one("#dash-time-tracking", Static)
-
-        if not metrics.jira_available:
-            widget.update("⏱ Time Tracking\n\n  Jira non configurato")
-            return
-
         today_bar = _progress_bar(
             metrics.logged_today_seconds,
             HOURS_PER_DAY * 3600,
@@ -187,22 +207,12 @@ class DashboardTab(Vertical):
 
     def _render_weekly_chart(self, metrics: DashboardMetrics) -> None:
         widget = self.query_one("#dash-weekly-chart", Static)
-
-        if not metrics.jira_available:
-            widget.update("")
-            return
-
         lines = ["📅 Carico Settimanale", ""]
         lines.append(_weekly_heatmap(metrics))
         widget.update("\n".join(lines))
 
     def _render_tasks(self, metrics: DashboardMetrics) -> None:
         widget = self.query_one("#dash-tasks", Static)
-
-        if not metrics.jira_available:
-            widget.update("🎫 Task\n\n  Jira non configurato")
-            return
-
         lines = [
             f"🎫 Task Aperti: {metrics.open_tasks}",
             "",
@@ -219,8 +229,10 @@ class DashboardTab(Vertical):
 
         lines = ["⚡ Quick Stats", ""]
         lines.append(f"  📧 Email non lette: {metrics.gmail_unread}")
-        lines.append(f"  📅 Meeting oggi: {metrics.meetings_today}")
-        lines.append(f"  📅 Meeting settimana: {metrics.meetings_week}")
+        today = f"{metrics.meetings_today_remaining}/{metrics.meetings_today_total}"
+        week = f"{metrics.meetings_week_remaining}/{metrics.meetings_week_total}"
+        lines.append(f"  📅 Meeting oggi: {today}")
+        lines.append(f"  📅 Meeting settimana: {week}")
 
         if metrics.jira_available:
             lines.append(f"  🎫 Task assegnati: {metrics.open_tasks}")

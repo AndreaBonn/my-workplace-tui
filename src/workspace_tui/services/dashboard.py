@@ -51,13 +51,26 @@ class DashboardMetrics:
 
     # Quick stats
     gmail_unread: int = 0
-    meetings_today: int = 0
-    meetings_week: int = 0
+    meetings_today_remaining: int = 0
+    meetings_today_total: int = 0
+    meetings_week_remaining: int = 0
+    meetings_week_total: int = 0
 
     # Meta
     jira_available: bool = False
     errors: dict[str, str] = field(default_factory=dict)
 
+
+MEETING_LINK_PATTERNS = (
+    "meet.google.com",
+    "teams.microsoft.com",
+    "zoom.us",
+    "webex.com",
+    "gotomeeting.com",
+    "whereby.com",
+    "bluejeans.com",
+    "chime.aws",
+)
 
 PRIORITY_MAP = {
     "Highest": "highest",
@@ -72,6 +85,12 @@ STATUS_CATEGORY_MAP = {
     "In Progress": "in_progress",
     "Done": "done",
 }
+
+
+def _is_meeting(event) -> bool:
+    """Return True if the event contains a video call link."""
+    searchable = f"{event.meet_link} {event.location} {event.description}".lower()
+    return any(pattern in searchable for pattern in MEETING_LINK_PATTERNS)
 
 
 class DashboardService:
@@ -221,20 +240,27 @@ class DashboardService:
         now = datetime.now(tz=UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = today_start + timedelta(days=1)
-        week_end = today_start + timedelta(days=(7 - today_start.weekday()))
+        week_start = today_start - timedelta(days=today_start.weekday())
+        week_end = week_start + timedelta(days=7)
 
         today_events = self._calendar.list_events(
             time_min=today_start,
             time_max=today_end,
         )
         week_events = self._calendar.list_events(
-            time_min=today_start,
+            time_min=week_start,
             time_max=week_end,
         )
 
+        today_meetings = [e for e in today_events if _is_meeting(e)]
+        week_meetings = [e for e in week_events if _is_meeting(e)]
+        now_iso = now.isoformat()
+
         return {
-            "meetings_today": len(today_events),
-            "meetings_week": len(week_events),
+            "meetings_today_remaining": sum(1 for e in today_meetings if e.start > now_iso),
+            "meetings_today_total": len(today_meetings),
+            "meetings_week_remaining": sum(1 for e in week_meetings if e.start > now_iso),
+            "meetings_week_total": len(week_meetings),
         }
 
     def _merge_jira_tasks(self, metrics: DashboardMetrics, data: dict) -> None:
@@ -260,5 +286,7 @@ class DashboardService:
     def _merge_calendar(self, metrics: DashboardMetrics, data: dict) -> None:
         if not data:
             return
-        metrics.meetings_today = data["meetings_today"]
-        metrics.meetings_week = data["meetings_week"]
+        metrics.meetings_today_remaining = data["meetings_today_remaining"]
+        metrics.meetings_today_total = data["meetings_today_total"]
+        metrics.meetings_week_remaining = data["meetings_week_remaining"]
+        metrics.meetings_week_total = data["meetings_week_total"]
