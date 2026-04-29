@@ -48,3 +48,6 @@ Thumbs.db
 
 # Project docs (internal specs, not for distribution)
 doc_progetto/
+
+# Claude Code
+CLAUDE.md
