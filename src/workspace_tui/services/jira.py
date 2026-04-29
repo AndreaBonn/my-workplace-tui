@@ -13,6 +13,7 @@ TTL_ISSUE_DETAIL = 60
 TTL_TRANSITIONS = 600
 TTL_METADATA = 1800
 TTL_WORKLOGS = 60
+TTL_COMMENTS = 60
 
 
 @dataclass
@@ -265,6 +266,24 @@ class JiraService(BaseService):
         self._cache.invalidate(f"{CACHE_PREFIX}issue:{issue_key}")
         logger.info("Worklog added to {}", issue_key)
 
+    def get_comments(self, issue_key: str) -> list[JiraComment]:
+        cache_key = f"{CACHE_PREFIX}comments:{issue_key}"
+
+        def fetch():
+            data = self._request("GET", f"/issue/{issue_key}/comment")
+            return [
+                JiraComment(
+                    comment_id=c["id"],
+                    author=c.get("author", {}).get("displayName", ""),
+                    body=self._extract_adf_comment(c.get("body")),
+                    created=c.get("created", ""),
+                    updated=c.get("updated", ""),
+                )
+                for c in data.get("comments", [])
+            ]
+
+        return self._cached(cache_key, ttl=TTL_COMMENTS, fetch=fetch)
+
     def add_comment(self, issue_key: str, body_text: str) -> None:
         body = {
             "body": {
@@ -280,6 +299,7 @@ class JiraService(BaseService):
         }
         self._request("POST", f"/issue/{issue_key}/comment", json=body)
         self._cache.invalidate(f"{CACHE_PREFIX}issue:{issue_key}")
+        self._cache.invalidate(f"{CACHE_PREFIX}comments:{issue_key}")
         logger.info("Comment added to {}", issue_key)
 
     def create_issue(

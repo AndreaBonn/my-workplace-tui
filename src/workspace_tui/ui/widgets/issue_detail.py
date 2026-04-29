@@ -20,11 +20,17 @@ class IssueDetail(VerticalScroll):
         yield Static("", id="issue-description", markup=False)
         yield Static("", id="issue-worklogs", markup=False)
         yield Static("", id="issue-links", markup=False)
+        yield Static("", id="issue-comments", markup=False)
 
     def watch_issue(self, issue: JiraIssue | None) -> None:
         if issue is None:
             self.query_one("#issue-header", Static).update("Seleziona un'issue per visualizzarla")
-            for widget_id in ("#issue-description", "#issue-worklogs", "#issue-links"):
+            for widget_id in (
+                "#issue-description",
+                "#issue-worklogs",
+                "#issue-links",
+                "#issue-comments",
+            ):
                 self.query_one(widget_id, Static).update("")
             return
 
@@ -121,3 +127,26 @@ class IssueDetail(VerticalScroll):
                 lines.append(f"             {wl.comment}")
             lines.append("")
         self.query_one("#issue-worklogs", Static).update("\n".join(lines))
+
+    def set_comments(self, comments: list[JiraComment]) -> None:
+        if not comments:
+            self.query_one("#issue-comments", Static).update("")
+            return
+
+        lines = [
+            f"\n{SEPARATOR}",
+            f"  COMMENTI ({len(comments)})",
+            SEPARATOR,
+            "",
+        ]
+        for c in comments:
+            date_str = ""
+            dt = parse_date(c.created)
+            if dt:
+                date_str = format_relative(dt)
+            lines.append(f"  {c.author}  —  {date_str}")
+            lines.append(f"  {SEPARATOR}")
+            for body_line in c.body.splitlines():
+                lines.append(f"  {body_line}")
+            lines.append("")
+        self.query_one("#issue-comments", Static).update("\n".join(lines))

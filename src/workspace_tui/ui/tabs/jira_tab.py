@@ -7,7 +7,7 @@ from textual.reactive import reactive
 from textual.widgets import Checkbox, Input, Static
 
 from workspace_tui.config.settings import Settings
-from workspace_tui.services.jira import JiraIssue, JiraService, JiraWorklog
+from workspace_tui.services.jira import JiraComment, JiraIssue, JiraService, JiraWorklog
 from workspace_tui.ui.widgets.issue_create_modal import IssueCreateData, IssueCreateModal
 from workspace_tui.ui.widgets.issue_detail import IssueDetail
 from workspace_tui.ui.widgets.issue_list import IssueListView, IssueSelected
@@ -123,18 +123,25 @@ class JiraTab(Vertical):
         try:
             issue = self.jira_service.get_issue(issue_key)
             worklogs = self.jira_service.get_worklogs(issue_key)
-            self.app.call_from_thread(self._update_issue_detail, issue, worklogs)
+            comments = self.jira_service.get_comments(issue_key)
+            self.app.call_from_thread(self._update_issue_detail, issue, worklogs, comments)
         except Exception as exc:
             self.app.call_from_thread(
                 self.app.notify, f"Errore caricamento issue: {exc}", severity="error", timeout=5
             )
 
-    def _update_issue_detail(self, issue: JiraIssue, worklogs: list[JiraWorklog]) -> None:
+    def _update_issue_detail(
+        self,
+        issue: JiraIssue,
+        worklogs: list[JiraWorklog],
+        comments: list[JiraComment],
+    ) -> None:
         self.selected_issue = issue
         detail = self.query_one("#issue-detail", IssueDetail)
         detail.jira_base_url = self._settings.jira_base_url if self._settings else ""
         detail.issue = issue
         detail.set_worklogs(worklogs)
+        detail.set_comments(comments)
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         if event.checkbox.id == "filter-my-issues":

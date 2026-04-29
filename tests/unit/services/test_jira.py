@@ -153,6 +153,59 @@ class TestAddWorklog:
         )
 
 
+class TestGetComments:
+    def test_returns_comments_sorted_chronologically(self, jira_service, mock_session):
+        mock_session.request.return_value = _mock_response(
+            {
+                "comments": [
+                    {
+                        "id": "c1",
+                        "author": {"displayName": "Mario Rossi"},
+                        "body": {
+                            "type": "doc",
+                            "version": 1,
+                            "content": [
+                                {
+                                    "type": "paragraph",
+                                    "content": [{"type": "text", "text": "First comment"}],
+                                }
+                            ],
+                        },
+                        "created": "2026-04-20T09:00:00.000+0000",
+                        "updated": "2026-04-20T09:00:00.000+0000",
+                    },
+                    {
+                        "id": "c2",
+                        "author": {"displayName": "Anna Bianchi"},
+                        "body": {
+                            "type": "doc",
+                            "version": 1,
+                            "content": [
+                                {
+                                    "type": "paragraph",
+                                    "content": [{"type": "text", "text": "Second comment"}],
+                                }
+                            ],
+                        },
+                        "created": "2026-04-21T10:00:00.000+0000",
+                        "updated": "2026-04-21T10:00:00.000+0000",
+                    },
+                ]
+            }
+        )
+        comments = jira_service.get_comments("PROJ-1")
+        assert len(comments) == 2
+        assert comments[0].author == "Mario Rossi"
+        assert comments[0].body == "First comment"
+        assert comments[1].author == "Anna Bianchi"
+        assert comments[1].body == "Second comment"
+
+    def test_empty_comments(self, jira_service, mock_session):
+        mock_session.request.return_value = _mock_response({"comments": []})
+        comments = jira_service.get_comments("PROJ-1")
+        assert comments == []
+
+
 class TestAddComment:
     def test_adds_comment(self, jira_service, mock_session):
         mock_session.request.return_value = _mock_response({}, status_code=201)
