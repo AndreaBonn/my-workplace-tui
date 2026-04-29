@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 STATUS_ICONS = {"To Do": "📋", "In Progress": "🔄", "Done": "✅"}
 
 
+def _escape(text: str) -> str:
+    """Escape square brackets for Textual markup parser."""
+    return text.replace("[", r"\[")
+
+
 def _fmt_hours(seconds: int) -> str:
     """Format seconds as 'Xh Ym'."""
     if seconds <= 0:
@@ -81,8 +86,7 @@ class DashboardTab(Vertical):
         yield Static("📊 Dashboard", classes="panel-title")
         with Horizontal(id="dashboard-layout"):
             with Vertical(id="dashboard-left"):
-                yield Static("", id="dash-next-meeting")
-                yield Static("", id="dash-today-agenda")
+                yield Static("", id="dash-upcoming")
                 yield Static("", id="dash-recent-tasks")
                 yield Static("", id="dash-recent-emails")
                 yield Static("", id="dash-recent-files")
@@ -114,18 +118,17 @@ class DashboardTab(Vertical):
             self.app.call_from_thread(self._show_error, str(exc))
 
     def _show_loading(self) -> None:
-        self.query_one("#dash-next-meeting", Static).update(
+        self.query_one("#dash-upcoming", Static).update(
             "⏳ Caricamento metriche...",
         )
 
     def _show_error(self, message: str) -> None:
-        self.query_one("#dash-next-meeting", Static).update(
+        self.query_one("#dash-upcoming", Static).update(
             f"❌ Errore: {message}",
         )
 
     def _render_metrics(self, metrics: DashboardMetrics) -> None:
-        self._render_next_meeting(metrics)
-        self._render_today_agenda(metrics)
+        self._render_upcoming(metrics)
         self._render_recent_tasks(metrics)
         self._render_recent_emails(metrics)
         self._render_recent_files(metrics)
@@ -138,46 +141,41 @@ class DashboardTab(Vertical):
 
     # ── Left panel ──────────────────────────────────────
 
-    def _render_next_meeting(self, metrics: DashboardMetrics) -> None:
-        widget = self.query_one("#dash-next-meeting", Static)
-        event = metrics.next_meeting
-        if not event:
-            widget.update("📹 Prossimo Meeting\n\n  Nessun meeting in programma")
+    def _render_upcoming(self, metrics: DashboardMetrics) -> None:
+        widget = self.query_one("#dash-upcoming", Static)
+        now = datetime.now(tz=UTC)
+        now_iso = now.isoformat()
+
+        upcoming = [e for e in metrics.today_events if not e.all_day and e.end > now_iso][:3]
+
+        lines = ["📅 Prossimi Eventi", ""]
+        if not upcoming:
+            lines.append("  Nessun evento in programma")
+            widget.update("\n".join(lines))
             return
 
-        start = _parse_event_time(event.start)
-        now = datetime.now(tz=UTC)
-        lines = ["📹 Prossimo Meeting", ""]
+        for i, event in enumerate(upcoming):
+            start = _parse_event_time(event.start)
+            icon = "📹" if _is_meeting(event) else "📌"
+            summary = _escape(event.summary)[:45]
 
-        if start:
-            delta = start - now
-            total_min = max(int(delta.total_seconds()) // 60, 0)
-            hours, mins = divmod(total_min, 60)
-            countdown = f"tra {hours}h {mins}m" if hours else f"tra {mins}m"
+            if not start:
+                lines.append(f"  {icon} {summary}")
+                continue
+
             time_str = start.strftime("%H:%M")
-            lines.append(f"  {event.summary}")
-            lines.append(f"  {time_str} ({countdown})")
-        else:
-            lines.append(f"  {event.summary}")
-
-        link = event.meet_link or event.html_link
-        if link:
-            lines.append(f"  {link}")
-
-        widget.update("\n".join(lines))
-
-    def _render_today_agenda(self, metrics: DashboardMetrics) -> None:
-        widget = self.query_one("#dash-today-agenda", Static)
-        lines = ["📅 Agenda di Oggi", ""]
-        if not metrics.today_events:
-            lines.append("  Nessun evento")
-        else:
-            for event in metrics.today_events:
-                start = _parse_event_time(event.start)
-                time_str = start.strftime("%H:%M") if start else "     "
-                icon = "📹" if _is_meeting(event) else "📌"
-                summary = event.summary[:45]
+            if i == 0:
+                delta = start - now
+                total_min = max(int(delta.total_seconds()) // 60, 0)
+                h, m = divmod(total_min, 60)
+                cd = f"tra {h}h {m}m" if h else f"tra {m}m"
+                lines.append(f"  {time_str} {icon} {summary} ({cd})")
+                link = event.meet_link or event.html_link
+                if link:
+                    lines.append(f"         {link}")
+            else:
                 lines.append(f"  {time_str} {icon} {summary}")
+
         widget.update("\n".join(lines))
 
     def _render_recent_tasks(self, metrics: DashboardMetrics) -> None:
@@ -188,7 +186,7 @@ class DashboardTab(Vertical):
         else:
             for issue in metrics.recent_tasks:
                 icon = STATUS_ICONS.get(issue.status_category, "📋")
-                summary = issue.summary[:38]
+                summary = _escape(issue.summary)[:38]
                 lines.append(f"  {icon} {issue.key}: {summary}")
         widget.update("\n".join(lines))
 
@@ -200,8 +198,8 @@ class DashboardTab(Vertical):
         else:
             for msg in metrics.recent_emails:
                 sender = msg.header.from_address.split("<")[0].strip()
-                sender = sender[:20]
-                subject = msg.header.subject[:35]
+                sender = _escape(sender[:20])
+                subject = _escape(msg.header.subject[:35])
                 dot = "●" if msg.is_unread else "○"
                 lines.append(f"  {dot} {sender} — {subject}")
         widget.update("\n".join(lines))
@@ -213,7 +211,7 @@ class DashboardTab(Vertical):
             lines.append("  Nessun file recente")
         else:
             for f in metrics.recent_files:
-                lines.append(f"  {f.icon} {f.name[:45]}")
+                lines.append(f"  {f.icon} {_escape(f.name[:45])}")
         widget.update("\n".join(lines))
 
     # ── Right panel ─────────────────────────────────────
