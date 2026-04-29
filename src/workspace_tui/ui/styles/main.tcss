@@ -297,3 +297,44 @@ StatusBar {
     padding: 1;
     color: $warning;
 }
+
+#dashboard-layout {
+    height: 1fr;
+}
+
+#dashboard-left {
+    width: 50%;
+    padding: 1 2;
+    border-right: solid $accent;
+}
+
+#dashboard-right {
+    width: 50%;
+    padding: 1 2;
+}
+
+#dash-time-tracking {
+    height: auto;
+    padding: 1 0;
+}
+
+#dash-weekly-chart {
+    height: auto;
+    padding: 1 0;
+}
+
+#dash-tasks {
+    height: auto;
+    padding: 1 0;
+}
+
+#dash-quick-stats {
+    height: auto;
+    padding: 1 0;
+}
+
+#dash-errors {
+    height: auto;
+    padding: 1 0;
+    color: $warning;
+}
