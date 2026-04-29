@@ -71,13 +71,15 @@ class CalendarService(BaseService):
         )
 
         def fetch():
+            fmt_min = time_min.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+            fmt_max = time_max.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
             result = self._retry(
                 lambda: (
                     self._service.events()
                     .list(
                         calendarId=calendar_id,
-                        timeMin=time_min.isoformat() + "Z",
-                        timeMax=time_max.isoformat() + "Z",
+                        timeMin=fmt_min,
+                        timeMax=fmt_max,
                         maxResults=max_results,
                         singleEvents=True,
                         orderBy="startTime",
