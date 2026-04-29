@@ -70,6 +70,7 @@ class JiraTab(Vertical):
                     yield Input(placeholder="Testo: parola chiave", id="filter-text")
                     yield Input(placeholder="Assegnato: nome persona", id="filter-assignee")
                     yield Input(placeholder="Stato: es. In corso", id="filter-status")
+                    yield Input(placeholder="Epica: chiave es. PROJ-100", id="filter-epic")
                     yield Checkbox("Assegnati a me", id="filter-my-issues")
                     yield Input(placeholder="JQL: query diretta", id="filter-jql")
                 yield Static("Issue", classes="panel-title")
@@ -167,7 +168,13 @@ class JiraTab(Vertical):
                 self._execute_jql(jql)
             return
 
-        if event.input.id in ("filter-project", "filter-text", "filter-assignee", "filter-status"):
+        if event.input.id in (
+            "filter-project",
+            "filter-text",
+            "filter-assignee",
+            "filter-status",
+            "filter-epic",
+        ):
             self._execute_filter_search()
             return
 
@@ -177,6 +184,7 @@ class JiraTab(Vertical):
         my_issues = self.query_one("#filter-my-issues", Checkbox).value
         assignee = self.query_one("#filter-assignee", Input).value.strip()
         status = self.query_one("#filter-status", Input).value.strip()
+        epic = self.query_one("#filter-epic", Input).value.strip()
 
         conditions = []
 
@@ -195,6 +203,9 @@ class JiraTab(Vertical):
         if status:
             safe_status = status.replace('"', '\\"')
             conditions.append(f'status = "{safe_status}"')
+        if epic:
+            safe_epic = epic.replace('"', '\\"').upper()
+            conditions.append(f'"Epic Link" = {safe_epic}')
 
         if not conditions:
             self._load_default_issues()

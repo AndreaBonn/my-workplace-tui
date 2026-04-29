@@ -59,10 +59,10 @@ class IssueDetail(VerticalScroll):
             f"  Assegnato:  {issue.assignee or 'Non assegnato'}\n"
             f"  Reporter:   {issue.reporter}\n"
             f"  Sprint:     {issue.sprint or '-'}\n"
-            f"{SEPARATOR}\n"
-            f"  Stima:      {estimate}\n"
-            f"  Logged:     {logged}\n"
         )
+        if issue.epic_key:
+            header += f"  Epica:      {issue.epic_key} — {issue.epic_summary}\n"
+        header += f"{SEPARATOR}\n  Stima:      {estimate}\n  Logged:     {logged}\n"
         if issue.labels:
             header += f"  Label:      {', '.join(issue.labels)}\n"
         if issue_url:

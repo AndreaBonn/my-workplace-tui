@@ -34,6 +34,8 @@ class JiraIssue:
     updated: str
     estimate_seconds: int
     logged_seconds: int
+    epic_key: str = ""
+    epic_summary: str = ""
     labels: list[str] = field(default_factory=list)
     subtasks: list[dict] = field(default_factory=list)
     links: list[dict] = field(default_factory=list)
@@ -120,7 +122,7 @@ class JiraService(BaseService):
                 "fields": "summary,status,issuetype,priority,"
                 "assignee,reporter,sprint,description,"
                 "created,updated,timeestimate,timespent,"
-                "labels,subtasks,issuelinks",
+                "labels,subtasks,issuelinks,parent",
             }
             data = self._request("GET", "/search/jql", params=params)
             issues = [self._parse_issue(item) for item in data.get("issues", [])]
@@ -382,6 +384,12 @@ class JiraService(BaseService):
         reporter = fields.get("reporter") or {}
         sprint_data = fields.get("sprint") or {}
         description = fields.get("description")
+        parent = fields.get("parent") or {}
+        epic_key = ""
+        epic_summary = ""
+        if parent and parent.get("fields", {}).get("issuetype", {}).get("name") == "Epic":
+            epic_key = parent.get("key", "")
+            epic_summary = parent.get("fields", {}).get("summary", "")
 
         subtasks = [
             {
@@ -421,6 +429,8 @@ class JiraService(BaseService):
             updated=fields.get("updated", ""),
             estimate_seconds=fields.get("timeestimate") or 0,
             logged_seconds=fields.get("timespent") or 0,
+            epic_key=epic_key,
+            epic_summary=epic_summary,
             labels=fields.get("labels", []),
             subtasks=subtasks,
             links=links,

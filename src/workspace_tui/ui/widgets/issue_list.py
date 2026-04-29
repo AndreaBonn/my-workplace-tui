@@ -45,10 +45,9 @@ class IssueListItem(ListItem):
         account_tag = ""
         if self.issue.account_name and self.issue.account_name != "default":
             account_tag = f"  [{self.issue.account_name}]"
-        yield Static(
-            f" {status_icon} {self.issue.key:<12} {priority_icon}{account_tag}\n   {summary}",
-            markup=False,
-        )
+        epic_tag = f"  ⚡{self.issue.epic_key}" if self.issue.epic_key else ""
+        first_line = f" {status_icon} {self.issue.key:<12} {priority_icon}{account_tag}{epic_tag}"
+        yield Static(f"{first_line}\n   {summary}", markup=False)
 
 
 class IssueListView(ListView):
