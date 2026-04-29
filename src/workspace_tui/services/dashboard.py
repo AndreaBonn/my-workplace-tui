@@ -147,6 +147,16 @@ class DashboardService:
         self._calendar = calendar_service
         self._jira_account_id = jira_account_id
 
+    def _resolve_account_id(self) -> None:
+        """Fetch accountId from /myself if not configured."""
+        if self._jira_account_id or not self._jira:
+            return
+        try:
+            me = self._jira.get_myself()
+            self._jira_account_id = me.get("accountId", "")
+        except Exception:
+            pass
+
     def collect(self) -> DashboardMetrics:
         """Collect all metrics in parallel.
 
@@ -156,6 +166,7 @@ class DashboardService:
             Aggregated metrics. Individual provider failures are captured
             in the errors dict without blocking other providers.
         """
+        self._resolve_account_id()
         metrics = DashboardMetrics(jira_available=self._jira is not None)
         collectors: dict[str, Callable[[], dict]] = {}
 

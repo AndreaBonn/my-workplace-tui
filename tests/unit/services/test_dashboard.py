@@ -91,6 +91,7 @@ def mock_jira():
         [_make_issue(), _make_issue(key="PROJ-2", priority="High", status_category="To Do")],
         2,
     )
+    service.get_myself.return_value = {"accountId": "alice-123"}
     service.get_worklogs_since.return_value = [_make_worklog()]
     return service
 
