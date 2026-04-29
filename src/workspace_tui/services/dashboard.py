@@ -224,49 +224,37 @@ class DashboardService:
 
         week_str = week_start.strftime("%Y-%m-%d")
         today_str = today_start.strftime("%Y-%m-%d")
+        since_ms = int(week_start.timestamp() * 1000)
 
-        jql = f"worklogDate >= '{week_str}' AND worklogAuthor = currentUser() ORDER BY updated DESC"
-        issues, _ = self._jira.search_issues(jql=jql, max_results=50)
+        all_worklogs = self._jira.get_worklogs_since(since_ms)
 
         logged_today = 0
         logged_week = 0
-        estimated_week = 0
         worklogs: list[WorklogEntry] = []
 
-        for issue in issues:
-            try:
-                issue_worklogs = self._jira.get_worklogs(issue.key)
-            except Exception:
+        for wl in all_worklogs:
+            if not self._is_current_user_worklog(wl):
                 continue
 
-            has_user_worklog = False
-            for wl in issue_worklogs:
-                if not self._is_current_user_worklog(wl):
-                    continue
+            wl_date = wl.started[:10] if wl.started else ""
+            if not wl_date or wl_date < week_str:
+                continue
 
-                wl_date = wl.started[:10] if wl.started else ""
-                if not wl_date or wl_date < week_str:
-                    continue
-
-                has_user_worklog = True
-                logged_week += wl.time_spent_seconds
-                worklogs.append(
-                    WorklogEntry(
-                        date=wl_date,
-                        seconds=wl.time_spent_seconds,
-                        issue_key=issue.key,
-                    )
+            logged_week += wl.time_spent_seconds
+            worklogs.append(
+                WorklogEntry(
+                    date=wl_date,
+                    seconds=wl.time_spent_seconds,
+                    issue_key="",
                 )
-                if wl_date >= today_str:
-                    logged_today += wl.time_spent_seconds
-
-            if has_user_worklog:
-                estimated_week += issue.estimate_seconds
+            )
+            if wl_date >= today_str:
+                logged_today += wl.time_spent_seconds
 
         return {
             "logged_today": logged_today,
             "logged_week": logged_week,
-            "estimated_week": estimated_week,
+            "estimated_week": 0,
             "worklogs": worklogs,
         }
 

@@ -91,7 +91,7 @@ def mock_jira():
         [_make_issue(), _make_issue(key="PROJ-2", priority="High", status_category="To Do")],
         2,
     )
-    service.get_worklogs.return_value = [_make_worklog()]
+    service.get_worklogs_since.return_value = [_make_worklog()]
     return service
 
 
@@ -145,15 +145,15 @@ class TestDashboardHappyPath:
 
     def test_worklog_aggregation(self, mock_jira):
         today = datetime.now(tz=UTC).strftime("%Y-%m-%dT10:00:00.000+0000")
-        mock_jira.get_worklogs.return_value = [
+        mock_jira.get_worklogs_since.return_value = [
             _make_worklog(seconds=3600, started=today),
             _make_worklog(seconds=1800, started=today),
         ]
         svc = DashboardService(jira_service=mock_jira)
         metrics = svc.collect()
 
-        assert metrics.logged_today_seconds >= 5400
-        assert metrics.logged_week_seconds >= 5400
+        assert metrics.logged_today_seconds == 5400
+        assert metrics.logged_week_seconds == 5400
 
 
 class TestDashboardNoJira:
@@ -223,7 +223,7 @@ class TestDashboardProviderFailures:
 
 class TestDashboardEdgeCases:
     def test_zero_worklogs(self, mock_jira):
-        mock_jira.get_worklogs.return_value = []
+        mock_jira.get_worklogs_since.return_value = []
         svc = DashboardService(jira_service=mock_jira)
         metrics = svc.collect()
 
@@ -235,7 +235,7 @@ class TestDashboardEdgeCases:
         old_date = (datetime.now(tz=UTC) - timedelta(days=14)).strftime(
             "%Y-%m-%dT10:00:00.000+0000"
         )
-        mock_jira.get_worklogs.return_value = [_make_worklog(started=old_date)]
+        mock_jira.get_worklogs_since.return_value = [_make_worklog(started=old_date)]
         svc = DashboardService(jira_service=mock_jira)
         metrics = svc.collect()
 

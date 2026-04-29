@@ -106,11 +106,12 @@ class JiraService(BaseService):
                 "jql": jql,
                 "maxResults": max_results,
                 "startAt": start_at,
-                "fields": "summary,status,issuetype,priority,assignee,reporter,"
-                "sprint,description,created,updated,timeestimate,"
-                "timespent,labels,subtasks,issuelinks",
+                "fields": "summary,status,issuetype,priority,"
+                "assignee,reporter,sprint,description,"
+                "created,updated,timeestimate,timespent,"
+                "labels,subtasks,issuelinks",
             }
-            data = self._request("GET", "/search", params=params)
+            data = self._request("GET", "/search/jql", params=params)
             issues = [self._parse_issue(item) for item in data.get("issues", [])]
             total = data.get("total", 0)
             return issues, total
@@ -169,6 +170,71 @@ class JiraService(BaseService):
                 )
                 for w in data.get("worklogs", [])
             ]
+
+        return self._cached(cache_key, ttl=TTL_WORKLOGS, fetch=fetch)
+
+    def get_worklogs_since(self, since_epoch_ms: int) -> list[JiraWorklog]:
+        """Fetch all worklogs updated since a given timestamp.
+
+        Uses /worklog/updated + /worklog/list endpoints to bypass
+        /search/jql which does not support worklogAuthor.
+
+        Parameters
+        ----------
+        since_epoch_ms
+            Unix epoch in milliseconds.
+        """
+        cache_key = f"{CACHE_PREFIX}worklogs_since:{since_epoch_ms}"
+
+        def fetch():
+            worklog_ids: list[int] = []
+            url_params: dict = {"since": since_epoch_ms}
+            while True:
+                data = self._request(
+                    "GET",
+                    "/worklog/updated",
+                    params=url_params,
+                )
+                for val in data.get("values", []):
+                    worklog_ids.append(val["worklogId"])
+                if data.get("lastPage", True):
+                    break
+                url_params = {"since": data["until"]}
+
+            if not worklog_ids:
+                return []
+
+            worklogs: list[JiraWorklog] = []
+            batch_size = 1000
+            for i in range(0, len(worklog_ids), batch_size):
+                batch = worklog_ids[i : i + batch_size]
+                data = self._request(
+                    "POST",
+                    "/worklog/list",
+                    json={"ids": batch},
+                )
+                for w in data:
+                    worklogs.append(
+                        JiraWorklog(
+                            worklog_id=str(w["id"]),
+                            author=w.get("author", {}).get(
+                                "displayName",
+                                "",
+                            ),
+                            author_account_id=w.get("author", {}).get(
+                                "accountId",
+                                "",
+                            ),
+                            time_spent=w.get("timeSpent", ""),
+                            time_spent_seconds=w.get(
+                                "timeSpentSeconds",
+                                0,
+                            ),
+                            started=w.get("started", ""),
+                            comment="",
+                        )
+                    )
+            return worklogs
 
         return self._cached(cache_key, ttl=TTL_WORKLOGS, fetch=fetch)
 
