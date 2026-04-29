@@ -337,6 +337,38 @@ class TestParseIssue:
         assert len(issue.links) == 1
         assert issue.links[0]["issue_key"] == "PROJ-5"
 
+    def test_parse_epic_from_parent(self, jira_service):
+        data = _make_issue_data()
+        data["fields"]["parent"] = {
+            "key": "PROJ-100",
+            "fields": {
+                "summary": "Epic One",
+                "issuetype": {"name": "Epic"},
+            },
+        }
+        issue = jira_service._parse_issue(data)
+        assert issue.epic_key == "PROJ-100"
+        assert issue.epic_summary == "Epic One"
+
+    def test_parse_no_parent_returns_empty_epic(self, jira_service):
+        data = _make_issue_data()
+        issue = jira_service._parse_issue(data)
+        assert issue.epic_key == ""
+        assert issue.epic_summary == ""
+
+    def test_parse_parent_non_epic_returns_empty_epic(self, jira_service):
+        data = _make_issue_data()
+        data["fields"]["parent"] = {
+            "key": "PROJ-50",
+            "fields": {
+                "summary": "Parent Story",
+                "issuetype": {"name": "Story"},
+            },
+        }
+        issue = jira_service._parse_issue(data)
+        assert issue.epic_key == ""
+        assert issue.epic_summary == ""
+
     def test_parse_issue_sets_account_name(self, cache):
         session = MagicMock()
         session.base_url = "https://acme.atlassian.net"

@@ -205,7 +205,7 @@ class JiraTab(Vertical):
             conditions.append(f'status = "{safe_status}"')
         if epic:
             safe_epic = epic.replace('"', '\\"').upper()
-            conditions.append(f'"Epic Link" = {safe_epic}')
+            conditions.append(f'("Epic Link" = {safe_epic} OR parent = {safe_epic})')
 
         if not conditions:
             self._load_default_issues()
