@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from workspace_tui.services.calendar import CalendarService
     from workspace_tui.services.chat import ChatService
     from workspace_tui.services.gmail import GmailService
-    from workspace_tui.services.jira import JiraService
+    from workspace_tui.services.jira import JiraMultiService, JiraService
 
 
 @dataclass
@@ -77,7 +77,7 @@ class PollManager:
         self._gmail_service: GmailService | None = None
         self._calendar_service: CalendarService | None = None
         self._chat_service: ChatService | None = None
-        self._jira_service: JiraService | None = None
+        self._jira_service: JiraService | JiraMultiService | None = None
 
         self._gmail_interval = 60
         self._calendar_interval = 300
@@ -90,7 +90,7 @@ class PollManager:
         gmail_service: GmailService | None = None,
         calendar_service: CalendarService | None = None,
         chat_service: ChatService | None = None,
-        jira_service: JiraService | None = None,
+        jira_service: JiraService | JiraMultiService | None = None,
         gmail_interval: int = 60,
         calendar_interval: int = 300,
         chat_interval: int = 30,

@@ -7,7 +7,13 @@ from textual.reactive import reactive
 from textual.widgets import Checkbox, Input, Static
 
 from workspace_tui.config.settings import Settings
-from workspace_tui.services.jira import JiraComment, JiraIssue, JiraService, JiraWorklog
+from workspace_tui.services.jira import (
+    JiraComment,
+    JiraIssue,
+    JiraMultiService,
+    JiraService,
+    JiraWorklog,
+)
 from workspace_tui.ui.widgets.issue_create_modal import IssueCreateData, IssueCreateModal
 from workspace_tui.ui.widgets.issue_detail import IssueDetail
 from workspace_tui.ui.widgets.issue_list import IssueListView, IssueSelected
@@ -15,7 +21,7 @@ from workspace_tui.ui.widgets.worklog_modal import WorklogData, WorklogModal
 
 JIRA_DISABLED_MESSAGE = (
     "Configura JIRA_USERNAME, JIRA_API_TOKEN e JIRA_BASE_URL "
-    "nel file .env per abilitare questa tab."
+    "(oppure JIRA_ACCOUNTS per multi-account) nel file .env per abilitare questa tab."
 )
 
 
@@ -34,7 +40,7 @@ class JiraTab(Vertical):
         Binding("f5", "saved_jql_5", "F5", show=True),
     ]
 
-    jira_service: reactive[JiraService | None] = reactive(None, init=False)
+    jira_service: reactive[JiraService | JiraMultiService | None] = reactive(None, init=False)
     selected_issue: reactive[JiraIssue | None] = reactive(None, init=False)
 
     def __init__(
@@ -57,7 +63,9 @@ class JiraTab(Vertical):
                     yield Input(
                         placeholder="Progetto: es. TAGAIT",
                         id="filter-project",
-                        value=self._settings.jira_default_project if self._settings else "",
+                        value=""
+                        if (self._settings and self._settings.jira_is_multi_account)
+                        else (self._settings.jira_default_project if self._settings else ""),
                     )
                     yield Input(placeholder="Testo: parola chiave", id="filter-text")
                     yield Input(placeholder="Assegnato: nome persona", id="filter-assignee")
@@ -69,7 +77,7 @@ class JiraTab(Vertical):
             with Vertical(id="jira-right-panel"):
                 yield IssueDetail(id="issue-detail")
 
-    def set_service(self, service: JiraService) -> None:
+    def set_service(self, service: JiraService | JiraMultiService) -> None:
         self.jira_service = service
         self._load_default_issues()
 
@@ -79,11 +87,14 @@ class JiraTab(Vertical):
     def _load_default_issues(self) -> None:
         if not self.jira_service or not self._settings:
             return
-        project = self._settings.jira_default_project
-        if project:
-            jql = f"project = {project} AND status != Done ORDER BY updated DESC"
-        else:
+        if self._settings.jira_is_multi_account:
             jql = "status != Done ORDER BY updated DESC"
+        else:
+            project = self._settings.jira_default_project
+            if project:
+                jql = f"project = {project} AND status != Done ORDER BY updated DESC"
+            else:
+                jql = "status != Done ORDER BY updated DESC"
         self._execute_jql(jql)
 
     def _execute_jql(self, jql: str) -> None:
@@ -138,7 +149,9 @@ class JiraTab(Vertical):
     ) -> None:
         self.selected_issue = issue
         detail = self.query_one("#issue-detail", IssueDetail)
-        detail.jira_base_url = self._settings.jira_base_url if self._settings else ""
+        detail.jira_base_url = issue.base_url or (
+            self._settings.jira_base_url if self._settings else ""
+        )
         detail.issue = issue
         detail.set_worklogs(worklogs)
         detail.set_comments(comments)
@@ -315,10 +328,12 @@ class JiraTab(Vertical):
 
     def action_open_browser(self) -> None:
         issue = self.selected_issue
-        if not issue or not self._settings:
+        if not issue:
             return
-        url = f"{self._settings.jira_base_url}/browse/{issue.key}"
-        webbrowser.open(url)
+        base = issue.base_url or (self._settings.jira_base_url if self._settings else "")
+        if not base:
+            return
+        webbrowser.open(f"{base}/browse/{issue.key}")
 
     def action_search_jql(self) -> None:
         self.query_one("#filter-project", Input).focus()

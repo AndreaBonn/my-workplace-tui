@@ -17,7 +17,7 @@ from workspace_tui.services.dashboard import DashboardService
 from workspace_tui.services.drive import DriveService
 from workspace_tui.services.errors import ConfigurationError
 from workspace_tui.services.gmail import GmailService
-from workspace_tui.services.jira import JiraService
+from workspace_tui.services.jira import JiraMultiService, JiraService
 from workspace_tui.services.search import SearchService
 from workspace_tui.ui.tabs.calendar_tab import CalendarTab
 from workspace_tui.ui.tabs.chat_tab import ChatTab
@@ -63,7 +63,7 @@ class WorkspaceTUI(App):
         self._calendar_service: CalendarService | None = None
         self._drive_service: DriveService | None = None
         self._chat_service: ChatService | None = None
-        self._jira_service: JiraService | None = None
+        self._jira_service: JiraMultiService | None = None
         self._search_service: SearchService | None = None
         self._dashboard_service: DashboardService | None = None
 
@@ -125,15 +125,24 @@ class WorkspaceTUI(App):
 
         if self.settings.jira_configured:
             try:
-                session = create_jira_session(
-                    username=self.settings.jira_username,
-                    api_token=self.settings.jira_api_token,
-                    base_url=self.settings.jira_base_url,
-                    allow_http=self.settings.jira_allow_http,
-                )
-                self._jira_service = JiraService(session=session, cache=self._cache)
-                self.app.call_from_thread(self._wire_jira_service)
-                logger.info("Jira service initialized")
+                services: dict[str, JiraService] = {}
+                for account in self.settings.jira_account_configs:
+                    session = create_jira_session(
+                        username=self.settings.jira_username,
+                        api_token=self.settings.jira_api_token,
+                        base_url=account.base_url,
+                        allow_http=self.settings.jira_allow_http,
+                    )
+                    services[account.name] = JiraService(
+                        session=session,
+                        cache=self._cache,
+                        account_name=account.name,
+                    )
+                if services:
+                    self._jira_service = JiraMultiService(services=services)
+                    self.app.call_from_thread(self._wire_jira_service)
+                    names = ", ".join(services.keys())
+                    logger.info("Jira initialized: {}", names)
             except Exception as exc:
                 self.app.call_from_thread(
                     self.notify, f"Errore Jira: {exc}", severity="warning", timeout=5
@@ -205,7 +214,6 @@ class WorkspaceTUI(App):
             gmail_service=self._gmail_service,
             calendar_service=self._calendar_service,
             drive_service=self._drive_service,
-            jira_account_id=self.settings.jira_account_id,
         )
         self.query_one(DashboardTab).set_service(self._dashboard_service)
 

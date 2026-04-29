@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from workspace_tui.cache.cache_manager import CacheManager
-from workspace_tui.services.jira import JiraService
+from workspace_tui.services.jira import JiraMultiService, JiraService
 
 
 @pytest.fixture
@@ -336,3 +336,114 @@ class TestParseIssue:
         issue = jira_service._parse_issue(data)
         assert len(issue.links) == 1
         assert issue.links[0]["issue_key"] == "PROJ-5"
+
+    def test_parse_issue_sets_account_name(self, cache):
+        session = MagicMock()
+        session.base_url = "https://acme.atlassian.net"
+        svc = JiraService(session=session, cache=cache, account_name="acme")
+        issue = svc._parse_issue(_make_issue_data())
+        assert issue.account_name == "acme"
+        assert issue.base_url == "https://acme.atlassian.net"
+
+
+def _make_jira_service(name: str, base_url: str, cache: CacheManager) -> JiraService:
+    session = MagicMock()
+    session.base_url = base_url
+    return JiraService(session=session, cache=cache, account_name=name)
+
+
+class TestJiraMultiService:
+    @pytest.fixture
+    def svc_a(self, cache):
+        return _make_jira_service("alpha", "https://alpha.atlassian.net", cache)
+
+    @pytest.fixture
+    def svc_b(self, cache):
+        return _make_jira_service("beta", "https://beta.atlassian.net", cache)
+
+    @pytest.fixture
+    def multi(self, svc_a, svc_b):
+        return JiraMultiService(services={"alpha": svc_a, "beta": svc_b})
+
+    def test_account_names(self, multi):
+        assert set(multi.account_names) == {"alpha", "beta"}
+
+    def test_get_base_url(self, multi):
+        assert multi.get_base_url("alpha") == "https://alpha.atlassian.net"
+        assert multi.get_base_url("beta") == "https://beta.atlassian.net"
+        assert multi.get_base_url("nonexistent") == ""
+
+    def test_search_issues_aggregates_both_accounts(self, multi, svc_a, svc_b):
+        svc_a._session.request.return_value = _mock_response(
+            {"issues": [_make_issue_data(key="AA-1")], "total": 1}
+        )
+        svc_b._session.request.return_value = _mock_response(
+            {"issues": [_make_issue_data(key="BB-1")], "total": 1}
+        )
+
+        issues, total = multi.search_issues(jql="status != Done")
+        assert total == 2
+        assert len(issues) == 2
+        keys = {i.key for i in issues}
+        assert keys == {"AA-1", "BB-1"}
+
+    def test_search_issues_tracks_project_mapping(self, multi, svc_a, svc_b):
+        svc_a._session.request.return_value = _mock_response(
+            {"issues": [_make_issue_data(key="AA-5")], "total": 1}
+        )
+        svc_b._session.request.return_value = _mock_response({"issues": [], "total": 0})
+
+        multi.search_issues(jql="status != Done")
+        assert multi._project_to_account["AA"] == "alpha"
+
+    def test_resolve_service_routes_correctly(self, multi, svc_a, svc_b):
+        multi._project_to_account["AA"] = "alpha"
+        multi._project_to_account["BB"] = "beta"
+
+        assert multi._resolve_service("AA-1") is svc_a
+        assert multi._resolve_service("BB-99") is svc_b
+
+    def test_get_issue_delegates_to_correct_account(self, multi, svc_a, svc_b):
+        multi._project_to_account["AA"] = "alpha"
+        svc_a._session.request.return_value = _mock_response(_make_issue_data(key="AA-1"))
+
+        issue = multi.get_issue("AA-1")
+        assert issue.key == "AA-1"
+        assert issue.account_name == "alpha"
+        svc_b._session.request.assert_not_called()
+
+    def test_search_issues_survives_one_account_failing(self, multi, svc_a, svc_b):
+        svc_a._session.request.side_effect = ConnectionError("timeout")
+        svc_b._session.request.return_value = _mock_response(
+            {"issues": [_make_issue_data(key="BB-1")], "total": 1}
+        )
+
+        issues, total = multi.search_issues(jql="status != Done")
+        assert total == 1
+        assert issues[0].key == "BB-1"
+
+    def test_search_issues_sorted_by_updated_desc(self, multi, svc_a, svc_b):
+        issue_old = _make_issue_data(key="AA-1")
+        issue_old["fields"]["updated"] = "2026-04-20T10:00:00.000+0000"
+        issue_new = _make_issue_data(key="BB-1")
+        issue_new["fields"]["updated"] = "2026-04-29T10:00:00.000+0000"
+
+        svc_a._session.request.return_value = _mock_response({"issues": [issue_old], "total": 1})
+        svc_b._session.request.return_value = _mock_response({"issues": [issue_new], "total": 1})
+
+        issues, _ = multi.search_issues(jql="status != Done")
+        assert issues[0].key == "BB-1"
+        assert issues[1].key == "AA-1"
+
+    def test_list_projects_aggregates(self, multi, svc_a, svc_b):
+        svc_a._session.request.return_value = _mock_response(
+            [{"key": "AA", "name": "Alpha Project"}]
+        )
+        svc_b._session.request.return_value = _mock_response(
+            [{"key": "BB", "name": "Beta Project"}]
+        )
+
+        projects = multi.list_projects()
+        assert len(projects) == 2
+        assert multi._project_to_account["AA"] == "alpha"
+        assert multi._project_to_account["BB"] == "beta"

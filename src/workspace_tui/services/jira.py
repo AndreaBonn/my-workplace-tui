@@ -1,3 +1,5 @@
+import contextlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
 import requests
@@ -35,6 +37,8 @@ class JiraIssue:
     labels: list[str] = field(default_factory=list)
     subtasks: list[dict] = field(default_factory=list)
     links: list[dict] = field(default_factory=list)
+    account_name: str = ""
+    base_url: str = ""
 
 
 @dataclass
@@ -65,10 +69,16 @@ class JiraTransition:
 
 
 class JiraService(BaseService):
-    def __init__(self, session: requests.Session, cache: CacheManager) -> None:
+    def __init__(
+        self,
+        session: requests.Session,
+        cache: CacheManager,
+        account_name: str = "",
+    ) -> None:
         super().__init__(cache=cache)
         self._session = session
         self._base_url = session.base_url.rstrip("/")  # type: ignore[attr-defined]
+        self._account_name = account_name
 
     def _api_url(self, path: str) -> str:
         return f"{self._base_url}/rest/api/3/{path.lstrip('/')}"
@@ -414,9 +424,171 @@ class JiraService(BaseService):
             labels=fields.get("labels", []),
             subtasks=subtasks,
             links=links,
+            account_name=self._account_name,
+            base_url=self._base_url,
         )
 
     def _extract_adf_comment(self, comment_data: dict | None) -> str:
         if not comment_data:
             return ""
         return adf_to_text(comment_data)
+
+
+MULTI_SEARCH_TIMEOUT = 30
+
+
+class JiraMultiService:
+    """Aggregates multiple JiraService instances for multi-account support.
+
+    Exposes the same public API as JiraService so consumers
+    (dashboard, search, poll_manager, jira_tab) work transparently.
+    """
+
+    def __init__(self, services: dict[str, JiraService]) -> None:
+        self._services = services
+        self._project_to_account: dict[str, str] = {}
+
+    @property
+    def account_names(self) -> list[str]:
+        return list(self._services.keys())
+
+    def get_base_url(self, account_name: str) -> str:
+        svc = self._services.get(account_name)
+        return svc._base_url if svc else ""
+
+    def _track_project(self, issue_key: str, account_name: str) -> None:
+        project_key = issue_key.split("-")[0]
+        self._project_to_account[project_key] = account_name
+
+    def _resolve_service(self, issue_key: str) -> JiraService:
+        project_key = issue_key.split("-")[0]
+        account_name = self._project_to_account.get(project_key)
+        if account_name and account_name in self._services:
+            return self._services[account_name]
+        self._populate_project_map()
+        account_name = self._project_to_account.get(project_key)
+        if account_name and account_name in self._services:
+            return self._services[account_name]
+        return next(iter(self._services.values()))
+
+    def _populate_project_map(self) -> None:
+        for name, svc in self._services.items():
+            try:
+                projects = svc.list_projects()
+                for p in projects:
+                    self._project_to_account[p["key"]] = name
+            except Exception:
+                pass
+
+    # --- Aggregating methods (fan-out to all accounts) ---
+
+    def search_issues(
+        self,
+        jql: str,
+        max_results: int = 50,
+        start_at: int = 0,
+    ) -> tuple[list[JiraIssue], int]:
+        all_issues: list[JiraIssue] = []
+        total = 0
+
+        with ThreadPoolExecutor(max_workers=len(self._services)) as pool:
+            futures = {
+                pool.submit(svc.search_issues, jql, max_results, start_at): name
+                for name, svc in self._services.items()
+            }
+            for future in as_completed(futures, timeout=MULTI_SEARCH_TIMEOUT):
+                name = futures[future]
+                try:
+                    issues, count = future.result()
+                    for issue in issues:
+                        self._track_project(issue.key, name)
+                    all_issues.extend(issues)
+                    total += count
+                except Exception as exc:
+                    logger.warning("Jira search failed for account {}: {}", name, exc)
+
+        all_issues.sort(key=lambda i: i.updated, reverse=True)
+        return all_issues[:max_results], total
+
+    def list_projects(self) -> list[dict]:
+        all_projects: list[dict] = []
+        for name, svc in self._services.items():
+            try:
+                projects = svc.list_projects()
+                for p in projects:
+                    self._project_to_account[p["key"]] = name
+                all_projects.extend(projects)
+            except Exception:
+                pass
+        return all_projects
+
+    def get_worklogs_since(self, since_epoch_ms: int) -> list[JiraWorklog]:
+        all_worklogs: list[JiraWorklog] = []
+        for svc in self._services.values():
+            with contextlib.suppress(Exception):
+                all_worklogs.extend(svc.get_worklogs_since(since_epoch_ms))
+        return all_worklogs
+
+    def search_users(self, query: str) -> list[dict]:
+        all_users: list[dict] = []
+        for svc in self._services.values():
+            with contextlib.suppress(Exception):
+                all_users.extend(svc.search_users(query))
+        return all_users
+
+    # --- Delegating methods (route to correct account) ---
+
+    def get_issue(self, issue_key: str) -> JiraIssue:
+        return self._resolve_service(issue_key).get_issue(issue_key)
+
+    def get_transitions(self, issue_key: str) -> list[JiraTransition]:
+        return self._resolve_service(issue_key).get_transitions(issue_key)
+
+    def transition_issue(self, issue_key: str, transition_id: str) -> None:
+        self._resolve_service(issue_key).transition_issue(issue_key, transition_id)
+
+    def get_worklogs(self, issue_key: str) -> list[JiraWorklog]:
+        return self._resolve_service(issue_key).get_worklogs(issue_key)
+
+    def add_worklog(
+        self,
+        issue_key: str,
+        time_spent_seconds: int,
+        started: str,
+        comment: str = "",
+    ) -> None:
+        self._resolve_service(issue_key).add_worklog(
+            issue_key, time_spent_seconds, started, comment
+        )
+
+    def get_comments(self, issue_key: str) -> list[JiraComment]:
+        return self._resolve_service(issue_key).get_comments(issue_key)
+
+    def add_comment(self, issue_key: str, body_text: str) -> None:
+        self._resolve_service(issue_key).add_comment(issue_key, body_text)
+
+    def create_issue(
+        self,
+        project_key: str,
+        summary: str,
+        issue_type: str = "Task",
+        priority: str = "Medium",
+        assignee_id: str = "",
+        description: str = "",
+    ) -> str:
+        svc = self._resolve_service(f"{project_key}-0")
+        return svc.create_issue(
+            project_key, summary, issue_type, priority, assignee_id, description
+        )
+
+    def update_issue(self, issue_key: str, **field_updates) -> None:
+        self._resolve_service(issue_key).update_issue(issue_key, **field_updates)
+
+    def get_priorities(self) -> list[dict]:
+        return next(iter(self._services.values())).get_priorities()
+
+    def get_issue_types(self) -> list[dict]:
+        return next(iter(self._services.values())).get_issue_types()
+
+    def get_myself(self) -> dict:
+        return next(iter(self._services.values())).get_myself()

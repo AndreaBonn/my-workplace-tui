@@ -42,8 +42,11 @@ class IssueListItem(ListItem):
         status_icon = STATUS_ICONS.get(self.issue.status, "◌")
         priority_icon = PRIORITY_ICONS.get(self.issue.priority, " ")
         summary = truncate(self.issue.summary, max_length=42)
+        account_tag = ""
+        if self.issue.account_name and self.issue.account_name != "default":
+            account_tag = f"  [{self.issue.account_name}]"
         yield Static(
-            f" {status_icon} {self.issue.key:<12} {priority_icon}\n   {summary}",
+            f" {status_icon} {self.issue.key:<12} {priority_icon}{account_tag}\n   {summary}",
             markup=False,
         )
 

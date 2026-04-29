@@ -140,13 +140,11 @@ class DashboardService:
         gmail_service=None,
         calendar_service=None,
         drive_service=None,
-        jira_account_id: str = "",
     ) -> None:
         self._jira = jira_service
         self._gmail = gmail_service
         self._calendar = calendar_service
         self._drive = drive_service
-        self._jira_account_id = jira_account_id
 
     def collect(self) -> DashboardMetrics:
         """Collect all metrics in parallel.
