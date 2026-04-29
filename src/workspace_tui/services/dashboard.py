@@ -10,6 +10,11 @@ from loguru import logger
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from workspace_tui.services.calendar import CalendarEvent
+    from workspace_tui.services.drive import DriveFile
+    from workspace_tui.services.gmail import EmailMessage
+    from workspace_tui.services.jira import JiraIssue
+
 PROVIDER_TIMEOUT = 30
 
 
@@ -30,24 +35,11 @@ class TasksByPriority:
 
 
 @dataclass
-class WorklogEntry:
-    date: str
-    seconds: int
-    issue_key: str
-
-
-@dataclass
 class DashboardMetrics:
     # Jira workload
     open_tasks: int = 0
     tasks_by_status: TasksByStatus = field(default_factory=TasksByStatus)
     tasks_by_priority: TasksByPriority = field(default_factory=TasksByPriority)
-
-    # Time tracking
-    logged_today_seconds: int = 0
-    logged_week_seconds: int = 0
-    estimated_week_seconds: int = 0
-    weekly_worklogs: list[WorklogEntry] = field(default_factory=list)
 
     # Quick stats
     gmail_unread: int = 0
@@ -59,6 +51,13 @@ class DashboardMetrics:
     meetings_week_total: int = 0
     meetings_week_done_seconds: int = 0
     meetings_week_total_seconds: int = 0
+
+    # Left panel — new sections
+    next_meeting: CalendarEvent | None = None
+    today_events: list[CalendarEvent] = field(default_factory=list)
+    recent_tasks: list[JiraIssue] = field(default_factory=list)
+    recent_emails: list[EmailMessage] = field(default_factory=list)
+    recent_files: list[DriveFile] = field(default_factory=list)
 
     # Meta
     jira_available: bool = False
@@ -133,29 +132,21 @@ def _is_meeting(event) -> bool:
 
 
 class DashboardService:
-    """Aggregates metrics from Jira, Gmail and Calendar for the dashboard."""
+    """Aggregates metrics from Jira, Gmail, Calendar and Drive."""
 
     def __init__(
         self,
         jira_service=None,
         gmail_service=None,
         calendar_service=None,
+        drive_service=None,
         jira_account_id: str = "",
     ) -> None:
         self._jira = jira_service
         self._gmail = gmail_service
         self._calendar = calendar_service
+        self._drive = drive_service
         self._jira_account_id = jira_account_id
-
-    def _resolve_account_id(self) -> None:
-        """Fetch accountId from /myself if not configured."""
-        if self._jira_account_id or not self._jira:
-            return
-        try:
-            me = self._jira.get_myself()
-            self._jira_account_id = me.get("accountId", "")
-        except Exception:
-            pass
 
     def collect(self) -> DashboardMetrics:
         """Collect all metrics in parallel.
@@ -166,17 +157,18 @@ class DashboardService:
             Aggregated metrics. Individual provider failures are captured
             in the errors dict without blocking other providers.
         """
-        self._resolve_account_id()
         metrics = DashboardMetrics(jira_available=self._jira is not None)
         collectors: dict[str, Callable[[], dict]] = {}
 
         if self._jira:
             collectors["jira_tasks"] = self._collect_jira_tasks
-            collectors["jira_worklogs"] = self._collect_jira_worklogs
+            collectors["jira_recent"] = self._collect_jira_recent
         if self._gmail:
             collectors["gmail"] = self._collect_gmail
         if self._calendar:
             collectors["calendar"] = self._collect_calendar
+        if self._drive:
+            collectors["drive"] = self._collect_drive
 
         if not collectors:
             return metrics
@@ -199,9 +191,10 @@ class DashboardService:
                         metrics.errors[name] = "Timeout"
 
         self._merge_jira_tasks(metrics, results.get("jira_tasks", {}))
-        self._merge_jira_worklogs(metrics, results.get("jira_worklogs", {}))
+        self._merge_jira_recent(metrics, results.get("jira_recent", {}))
         self._merge_gmail(metrics, results.get("gmail", {}))
         self._merge_calendar(metrics, results.get("calendar", {}))
+        self._merge_drive(metrics, results.get("drive", {}))
 
         return metrics
 
@@ -227,53 +220,10 @@ class DashboardService:
             "by_priority": by_priority,
         }
 
-    def _collect_jira_worklogs(self) -> dict:
-        now = datetime.now(tz=UTC)
-        week_start = now - timedelta(days=now.weekday())
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        week_str = week_start.strftime("%Y-%m-%d")
-        today_str = today_start.strftime("%Y-%m-%d")
-        since_ms = int(week_start.timestamp() * 1000)
-
-        all_worklogs = self._jira.get_worklogs_since(since_ms)
-
-        logged_today = 0
-        logged_week = 0
-        worklogs: list[WorklogEntry] = []
-
-        for wl in all_worklogs:
-            if not self._is_current_user_worklog(wl):
-                continue
-
-            wl_date = wl.started[:10] if wl.started else ""
-            if not wl_date or wl_date < week_str:
-                continue
-
-            logged_week += wl.time_spent_seconds
-            worklogs.append(
-                WorklogEntry(
-                    date=wl_date,
-                    seconds=wl.time_spent_seconds,
-                    issue_key="",
-                )
-            )
-            if wl_date >= today_str:
-                logged_today += wl.time_spent_seconds
-
-        return {
-            "logged_today": logged_today,
-            "logged_week": logged_week,
-            "estimated_week": 0,
-            "worklogs": worklogs,
-        }
-
-    def _is_current_user_worklog(self, worklog) -> bool:
-        """Check if a worklog belongs to the current user."""
-        if not self._jira_account_id:
-            return True
-        return worklog.author_account_id == self._jira_account_id
+    def _collect_jira_recent(self) -> dict:
+        jql = "assignee = currentUser() ORDER BY updated DESC"
+        issues, _ = self._jira.search_issues(jql=jql, max_results=5)
+        return {"recent_tasks": issues}
 
     def _collect_gmail(self) -> dict:
         labels = self._gmail.list_labels()
@@ -282,7 +232,13 @@ class DashboardService:
             if label.label_id == "INBOX":
                 unread = label.unread_count
                 break
-        return {"unread": unread}
+
+        messages, _ = self._gmail.list_messages(
+            label_id="INBOX",
+            max_results=5,
+            query="is:unread",
+        )
+        return {"unread": unread, "recent_emails": messages}
 
     def _collect_calendar(self) -> dict:
         now = datetime.now(tz=UTC)
@@ -313,7 +269,12 @@ class DashboardService:
             now_iso,
         )
 
+        future_meetings = [e for e in week_meetings if e.start > now_iso]
+        next_meeting = future_meetings[0] if future_meetings else None
+
         return {
+            "today_events": today_events,
+            "next_meeting": next_meeting,
             "meetings_today_remaining": sum(1 for e in today_meetings if e.start > now_iso),
             "meetings_today_total": len(today_meetings),
             "meetings_today_done_seconds": today_done,
@@ -324,6 +285,10 @@ class DashboardService:
             "meetings_week_total_seconds": week_total,
         }
 
+    def _collect_drive(self) -> dict:
+        files = self._drive.list_recent(max_results=5)
+        return {"recent_files": files}
+
     def _merge_jira_tasks(self, metrics: DashboardMetrics, data: dict) -> None:
         if not data:
             return
@@ -331,22 +296,22 @@ class DashboardService:
         metrics.tasks_by_status = data["by_status"]
         metrics.tasks_by_priority = data["by_priority"]
 
-    def _merge_jira_worklogs(self, metrics: DashboardMetrics, data: dict) -> None:
+    def _merge_jira_recent(self, metrics: DashboardMetrics, data: dict) -> None:
         if not data:
             return
-        metrics.logged_today_seconds = data["logged_today"]
-        metrics.logged_week_seconds = data["logged_week"]
-        metrics.estimated_week_seconds = data["estimated_week"]
-        metrics.weekly_worklogs = data["worklogs"]
+        metrics.recent_tasks = data["recent_tasks"]
 
     def _merge_gmail(self, metrics: DashboardMetrics, data: dict) -> None:
         if not data:
             return
         metrics.gmail_unread = data["unread"]
+        metrics.recent_emails = data.get("recent_emails", [])
 
     def _merge_calendar(self, metrics: DashboardMetrics, data: dict) -> None:
         if not data:
             return
+        metrics.today_events = data.get("today_events", [])
+        metrics.next_meeting = data.get("next_meeting")
         metrics.meetings_today_remaining = data["meetings_today_remaining"]
         metrics.meetings_today_total = data["meetings_today_total"]
         metrics.meetings_today_done_seconds = data["meetings_today_done_seconds"]
@@ -355,3 +320,8 @@ class DashboardService:
         metrics.meetings_week_total = data["meetings_week_total"]
         metrics.meetings_week_done_seconds = data["meetings_week_done_seconds"]
         metrics.meetings_week_total_seconds = data["meetings_week_total_seconds"]
+
+    def _merge_drive(self, metrics: DashboardMetrics, data: dict) -> None:
+        if not data:
+            return
+        metrics.recent_files = data["recent_files"]

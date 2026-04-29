@@ -204,6 +204,7 @@ class WorkspaceTUI(App):
             jira_service=self._jira_service,
             gmail_service=self._gmail_service,
             calendar_service=self._calendar_service,
+            drive_service=self._drive_service,
             jira_account_id=self.settings.jira_account_id,
         )
         self.query_one(DashboardTab).set_service(self._dashboard_service)

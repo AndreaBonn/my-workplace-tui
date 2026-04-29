@@ -1,4 +1,3 @@
-from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,8 +10,9 @@ from workspace_tui.services.dashboard import (
     _is_meeting,
     _meeting_duration_seconds,
 )
-from workspace_tui.services.gmail import GmailLabel
-from workspace_tui.services.jira import JiraIssue, JiraWorklog
+from workspace_tui.services.drive import DriveFile
+from workspace_tui.services.gmail import EmailHeader, EmailMessage, GmailLabel
+from workspace_tui.services.jira import JiraIssue
 
 
 def _make_issue(
@@ -40,23 +40,6 @@ def _make_issue(
     )
 
 
-def _make_worklog(
-    seconds: int = 3600,
-    started: str | None = None,
-) -> JiraWorklog:
-    if started is None:
-        started = datetime.now(tz=UTC).strftime("%Y-%m-%dT10:00:00.000+0000")
-    return JiraWorklog(
-        worklog_id="wl1",
-        author="Alice",
-        author_account_id="alice-123",
-        time_spent="1h",
-        time_spent_seconds=seconds,
-        started=started,
-        comment="",
-    )
-
-
 def _make_gmail_label(label_id: str = "INBOX", unread: int = 5) -> GmailLabel:
     return GmailLabel(
         label_id=label_id,
@@ -66,16 +49,29 @@ def _make_gmail_label(label_id: str = "INBOX", unread: int = 5) -> GmailLabel:
     )
 
 
+def _make_email(subject: str = "Test email") -> EmailMessage:
+    return EmailMessage(
+        message_id="msg1",
+        thread_id="thr1",
+        header=EmailHeader(
+            from_address="Sender <sender@test.com>",
+            subject=subject,
+        ),
+        is_unread=True,
+    )
+
+
 def _make_event(
     meet_link: str = "",
     location: str = "",
     description: str = "",
     start: str = "2099-01-01T10:00:00Z",
     end: str = "2099-01-01T11:00:00Z",
+    summary: str = "Evento",
 ) -> CalendarEvent:
     return CalendarEvent(
         event_id="evt1",
-        summary="Evento",
+        summary=summary,
         start=start,
         end=end,
         meet_link=meet_link,
@@ -84,15 +80,24 @@ def _make_event(
     )
 
 
+def _make_drive_file(name: str = "doc.txt") -> DriveFile:
+    return DriveFile(file_id="f1", name=name, mime_type="text/plain")
+
+
 @pytest.fixture
 def mock_jira():
     service = MagicMock()
     service.search_issues.return_value = (
-        [_make_issue(), _make_issue(key="PROJ-2", priority="High", status_category="To Do")],
+        [
+            _make_issue(),
+            _make_issue(
+                key="PROJ-2",
+                priority="High",
+                status_category="To Do",
+            ),
+        ],
         2,
     )
-    service.get_myself.return_value = {"accountId": "alice-123"}
-    service.get_worklogs_since.return_value = [_make_worklog()]
     return service
 
 
@@ -100,6 +105,7 @@ def mock_jira():
 def mock_gmail():
     service = MagicMock()
     service.list_labels.return_value = [_make_gmail_label()]
+    service.list_messages.return_value = ([_make_email()], None)
     return service
 
 
@@ -114,12 +120,26 @@ def mock_calendar():
     return service
 
 
+@pytest.fixture
+def mock_drive():
+    service = MagicMock()
+    service.list_recent.return_value = [_make_drive_file()]
+    return service
+
+
 class TestDashboardHappyPath:
-    def test_collects_all_metrics(self, mock_jira, mock_gmail, mock_calendar):
+    def test_collects_all_metrics(
+        self,
+        mock_jira,
+        mock_gmail,
+        mock_calendar,
+        mock_drive,
+    ):
         svc = DashboardService(
             jira_service=mock_jira,
             gmail_service=mock_gmail,
             calendar_service=mock_calendar,
+            drive_service=mock_drive,
         )
         metrics = svc.collect()
 
@@ -127,7 +147,8 @@ class TestDashboardHappyPath:
         assert metrics.open_tasks == 2
         assert metrics.gmail_unread == 5
         assert metrics.meetings_today_total == 3
-        assert metrics.meetings_today_remaining == 3
+        assert len(metrics.recent_emails) == 1
+        assert len(metrics.recent_files) == 1
         assert not metrics.errors
 
     def test_tasks_by_status_breakdown(self, mock_jira):
@@ -144,17 +165,11 @@ class TestDashboardHappyPath:
         assert metrics.tasks_by_priority.medium == 1
         assert metrics.tasks_by_priority.high == 1
 
-    def test_worklog_aggregation(self, mock_jira):
-        today = datetime.now(tz=UTC).strftime("%Y-%m-%dT10:00:00.000+0000")
-        mock_jira.get_worklogs_since.return_value = [
-            _make_worklog(seconds=3600, started=today),
-            _make_worklog(seconds=1800, started=today),
-        ]
+    def test_recent_tasks_collected(self, mock_jira):
         svc = DashboardService(jira_service=mock_jira)
         metrics = svc.collect()
 
-        assert metrics.logged_today_seconds == 5400
-        assert metrics.logged_week_seconds == 5400
+        assert len(metrics.recent_tasks) == 2
 
 
 class TestDashboardNoJira:
@@ -211,45 +226,86 @@ class TestDashboardProviderFailures:
         failing_gmail.list_labels.side_effect = RuntimeError("down")
         failing_calendar = MagicMock()
         failing_calendar.list_events.side_effect = RuntimeError("down")
+        failing_drive = MagicMock()
+        failing_drive.list_recent.side_effect = RuntimeError("down")
 
         svc = DashboardService(
             jira_service=failing_jira,
             gmail_service=failing_gmail,
             calendar_service=failing_calendar,
+            drive_service=failing_drive,
         )
         metrics = svc.collect()
 
-        assert len(metrics.errors) >= 3
+        assert len(metrics.errors) >= 4
 
 
 class TestDashboardEdgeCases:
-    def test_zero_worklogs(self, mock_jira):
-        mock_jira.get_worklogs_since.return_value = []
-        svc = DashboardService(jira_service=mock_jira)
-        metrics = svc.collect()
-
-        assert metrics.logged_today_seconds == 0
-        assert metrics.logged_week_seconds == 0
-        assert metrics.weekly_worklogs == []
-
-    def test_old_worklogs_excluded(self, mock_jira):
-        old_date = (datetime.now(tz=UTC) - timedelta(days=14)).strftime(
-            "%Y-%m-%dT10:00:00.000+0000"
-        )
-        mock_jira.get_worklogs_since.return_value = [_make_worklog(started=old_date)]
-        svc = DashboardService(jira_service=mock_jira)
-        metrics = svc.collect()
-
-        assert metrics.logged_week_seconds == 0
-
     def test_gmail_no_inbox_label(self, mock_gmail):
         mock_gmail.list_labels.return_value = [
-            GmailLabel(label_id="SENT", name="Inviati", label_type="system", unread_count=0)
+            GmailLabel(
+                label_id="SENT",
+                name="Inviati",
+                label_type="system",
+                unread_count=0,
+            )
         ]
         svc = DashboardService(gmail_service=mock_gmail)
         metrics = svc.collect()
 
         assert metrics.gmail_unread == 0
+
+    def test_recent_emails_collected(self, mock_gmail):
+        mock_gmail.list_messages.return_value = (
+            [_make_email("Subj 1"), _make_email("Subj 2")],
+            None,
+        )
+        svc = DashboardService(gmail_service=mock_gmail)
+        metrics = svc.collect()
+
+        assert len(metrics.recent_emails) == 2
+
+    def test_drive_files_collected(self, mock_drive):
+        svc = DashboardService(drive_service=mock_drive)
+        metrics = svc.collect()
+
+        assert len(metrics.recent_files) == 1
+
+    def test_next_meeting_is_first_future(self):
+        cal = MagicMock()
+        cal.list_events.return_value = [
+            _make_event(
+                meet_link="https://meet.google.com/abc",
+                start="2099-01-01T10:00:00Z",
+                end="2099-01-01T11:00:00Z",
+                summary="First",
+            ),
+            _make_event(
+                meet_link="https://zoom.us/j/123",
+                start="2099-01-01T14:00:00Z",
+                end="2099-01-01T15:00:00Z",
+                summary="Second",
+            ),
+        ]
+        svc = DashboardService(calendar_service=cal)
+        metrics = svc.collect()
+
+        assert metrics.next_meeting is not None
+        assert metrics.next_meeting.summary == "First"
+
+    def test_no_next_meeting_when_all_past(self):
+        cal = MagicMock()
+        cal.list_events.return_value = [
+            _make_event(
+                meet_link="https://meet.google.com/abc",
+                start="2000-01-01T10:00:00Z",
+                end="2000-01-01T11:00:00Z",
+            ),
+        ]
+        svc = DashboardService(calendar_service=cal)
+        metrics = svc.collect()
+
+        assert metrics.next_meeting is None
 
 
 class TestMeetingFilter:
@@ -258,7 +314,9 @@ class TestMeetingFilter:
         assert _is_meeting(event) is True
 
     def test_event_with_teams_in_location_is_meeting(self):
-        event = _make_event(location="https://teams.microsoft.com/l/meetup-join/123")
+        event = _make_event(
+            location="https://teams.microsoft.com/l/meetup-join/123",
+        )
         assert _is_meeting(event) is True
 
     def test_event_with_zoom_in_description_is_meeting(self):
@@ -316,9 +374,18 @@ class TestMeetingFilter:
         future = "2099-01-01T15:00:00Z"
         cal = MagicMock()
         cal.list_events.return_value = [
-            _make_event(meet_link="https://meet.google.com/abc", start=past),
-            _make_event(meet_link="https://zoom.us/j/123", start=past),
-            _make_event(meet_link="https://teams.microsoft.com/l/x", start=future),
+            _make_event(
+                meet_link="https://meet.google.com/abc",
+                start=past,
+            ),
+            _make_event(
+                meet_link="https://zoom.us/j/123",
+                start=past,
+            ),
+            _make_event(
+                meet_link="https://teams.microsoft.com/l/x",
+                start=future,
+            ),
         ]
         svc = DashboardService(calendar_service=cal)
         metrics = svc.collect()
@@ -361,7 +428,10 @@ class TestMeetingDuration:
                 end="2000-01-01T10:30:00Z",
             ),
         ]
-        done, total = _meeting_duration_seconds(meetings, now_iso="2026-01-01T00:00:00+00:00")
+        done, total = _meeting_duration_seconds(
+            meetings,
+            now_iso="2026-01-01T00:00:00+00:00",
+        )
         assert total == 5400
         assert done == 5400
 
@@ -373,7 +443,10 @@ class TestMeetingDuration:
                 end="2099-01-01T10:00:00Z",
             ),
         ]
-        done, total = _meeting_duration_seconds(meetings, now_iso="2026-01-01T00:00:00+00:00")
+        done, total = _meeting_duration_seconds(
+            meetings,
+            now_iso="2026-01-01T00:00:00+00:00",
+        )
         assert total == 3600
         assert done == 0
 
@@ -390,12 +463,18 @@ class TestMeetingDuration:
                 end="2099-01-01T10:00:00Z",
             ),
         ]
-        done, total = _meeting_duration_seconds(meetings, now_iso="2026-01-01T00:00:00+00:00")
+        done, total = _meeting_duration_seconds(
+            meetings,
+            now_iso="2026-01-01T00:00:00+00:00",
+        )
         assert total == 7200
         assert done == 3600
 
     def test_meeting_duration_empty_list(self):
-        done, total = _meeting_duration_seconds([], now_iso="2026-01-01T00:00:00+00:00")
+        done, total = _meeting_duration_seconds(
+            [],
+            now_iso="2026-01-01T00:00:00+00:00",
+        )
         assert total == 0
         assert done == 0
 

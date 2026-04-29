@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from textual.binding import Binding
@@ -7,14 +8,14 @@ from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.widgets import Static
 
+from workspace_tui.services.dashboard import _is_meeting, _parse_event_time
+
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
     from workspace_tui.services.dashboard import DashboardMetrics, DashboardService
 
-HOURS_PER_DAY = 8
-DAYS_PER_WEEK = 5
-WEEKLY_CAPACITY_SECONDS = HOURS_PER_DAY * DAYS_PER_WEEK * 3600
+STATUS_ICONS = {"To Do": "📋", "In Progress": "🔄", "Done": "✅"}
 
 
 def _fmt_hours(seconds: int) -> str:
@@ -31,7 +32,7 @@ def _fmt_hours(seconds: int) -> str:
 
 
 def _progress_bar(current: int, total: int, width: int = 20) -> str:
-    """Render a text progress bar: [████████░░░░] 65%."""
+    """Render a text progress bar: [████░░░░] 65%."""
     if total <= 0:
         return f"[{'░' * width}] --"
     ratio = min(current / total, 1.0)
@@ -69,36 +70,6 @@ def _priority_breakdown(metrics: DashboardMetrics) -> str:
     return "\n".join(parts) if parts else "—"
 
 
-def _weekly_heatmap(metrics: DashboardMetrics) -> str:
-    """Build a daily breakdown of logged hours for the week."""
-    from datetime import UTC, datetime, timedelta
-
-    now = datetime.now(tz=UTC)
-    week_start = now - timedelta(days=now.weekday())
-    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-
-    day_names = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
-    daily: dict[str, int] = {}
-    for i in range(7):
-        day = (week_start + timedelta(days=i)).strftime("%Y-%m-%d")
-        daily[day] = 0
-
-    for wl in metrics.weekly_worklogs:
-        if wl.date in daily:
-            daily[wl.date] += wl.seconds
-
-    lines = []
-    for i, (date, seconds) in enumerate(daily.items()):
-        name = day_names[i]
-        hours_logged = seconds / 3600
-        bar_len = int(min(hours_logged / HOURS_PER_DAY, 1.0) * 12)
-        bar = "▓" * bar_len + "░" * (12 - bar_len)
-        marker = " ◀ oggi" if date == now.strftime("%Y-%m-%d") else ""
-        lines.append(f"  {name} {bar} {_fmt_hours(seconds)}{marker}")
-
-    return "\n".join(lines)
-
-
 class DashboardTab(Vertical):
     BINDINGS = [
         Binding("r", "reload", "Ricarica", show=True),
@@ -110,8 +81,11 @@ class DashboardTab(Vertical):
         yield Static("📊 Dashboard", classes="panel-title")
         with Horizontal(id="dashboard-layout"):
             with Vertical(id="dashboard-left"):
-                yield Static("", id="dash-time-tracking")
-                yield Static("", id="dash-weekly-chart")
+                yield Static("", id="dash-next-meeting")
+                yield Static("", id="dash-today-agenda")
+                yield Static("", id="dash-recent-tasks")
+                yield Static("", id="dash-recent-emails")
+                yield Static("", id="dash-recent-files")
             with Vertical(id="dashboard-right"):
                 yield Static("", id="dash-tasks")
                 yield Static("", id="dash-quick-stats")
@@ -140,97 +114,109 @@ class DashboardTab(Vertical):
             self.app.call_from_thread(self._show_error, str(exc))
 
     def _show_loading(self) -> None:
-        self.query_one("#dash-time-tracking", Static).update("⏳ Caricamento metriche...")
+        self.query_one("#dash-next-meeting", Static).update(
+            "⏳ Caricamento metriche...",
+        )
 
     def _show_error(self, message: str) -> None:
-        self.query_one("#dash-time-tracking", Static).update(f"❌ Errore: {message}")
+        self.query_one("#dash-next-meeting", Static).update(
+            f"❌ Errore: {message}",
+        )
 
     def _render_metrics(self, metrics: DashboardMetrics) -> None:
-        if not metrics.jira_available:
-            self._render_no_jira(metrics)
-            return
-        self._render_time_tracking(metrics)
-        self._render_weekly_chart(metrics)
-        self._render_tasks(metrics)
+        self._render_next_meeting(metrics)
+        self._render_today_agenda(metrics)
+        self._render_recent_tasks(metrics)
+        self._render_recent_emails(metrics)
+        self._render_recent_files(metrics)
+        if metrics.jira_available:
+            self._render_tasks(metrics)
+        else:
+            self.query_one("#dash-tasks", Static).update("")
         self._render_quick_stats(metrics)
         self._render_errors(metrics)
 
-    def _render_no_jira(self, metrics: DashboardMetrics) -> None:
-        """Render compact layout when Jira is not configured."""
-        self.query_one("#dash-time-tracking", Static).update("")
-        self.query_one("#dash-weekly-chart", Static).update("")
-        self.query_one("#dash-tasks", Static).update("")
+    # ── Left panel ──────────────────────────────────────
 
-        today_cnt = f"{metrics.meetings_today_remaining}/{metrics.meetings_today_total}"
-        today_bar = _progress_bar(
-            metrics.meetings_today_done_seconds,
-            metrics.meetings_today_total_seconds,
-            width=12,
-        )
-        today_hrs = (
-            f"{_fmt_hours(metrics.meetings_today_done_seconds)}"
-            f" / {_fmt_hours(metrics.meetings_today_total_seconds)}"
-        )
-        week_cnt = f"{metrics.meetings_week_remaining}/{metrics.meetings_week_total}"
-        week_bar = _progress_bar(
-            metrics.meetings_week_done_seconds,
-            metrics.meetings_week_total_seconds,
-            width=12,
-        )
-        week_hrs = (
-            f"{_fmt_hours(metrics.meetings_week_done_seconds)}"
-            f" / {_fmt_hours(metrics.meetings_week_total_seconds)}"
-        )
-        lines = [
-            "⚡ Quick Stats",
-            "",
-            f"  📧 Email non lette: {metrics.gmail_unread}",
-            f"  📅 Meeting oggi: {today_cnt}  {today_bar}",
-            f"     {today_hrs}",
-            f"  📅 Meeting settimana: {week_cnt}  {week_bar}",
-            f"     {week_hrs}",
-            "",
-            "  ─────────────────────────────────",
-            "",
-            "  Configura JIRA_USERNAME, JIRA_API_TOKEN,",
-            "     JIRA_BASE_URL in .env per time tracking e task",
-        ]
-        self.query_one("#dash-quick-stats", Static).update("\n".join(lines))
-        self._render_errors(metrics)
+    def _render_next_meeting(self, metrics: DashboardMetrics) -> None:
+        widget = self.query_one("#dash-next-meeting", Static)
+        event = metrics.next_meeting
+        if not event:
+            widget.update("📹 Prossimo Meeting\n\n  Nessun meeting in programma")
+            return
 
-    def _render_time_tracking(self, metrics: DashboardMetrics) -> None:
-        widget = self.query_one("#dash-time-tracking", Static)
-        today_bar = _progress_bar(
-            metrics.logged_today_seconds,
-            HOURS_PER_DAY * 3600,
-        )
-        week_bar = _progress_bar(
-            metrics.logged_week_seconds,
-            WEEKLY_CAPACITY_SECONDS,
-        )
+        start = _parse_event_time(event.start)
+        now = datetime.now(tz=UTC)
+        lines = ["📹 Prossimo Meeting", ""]
 
-        lines = [
-            "⏱  Time Tracking",
-            "",
-            f"  Oggi:      {_fmt_hours(metrics.logged_today_seconds)} / {HOURS_PER_DAY}h",
-            f"  {today_bar}",
-            "",
-            f"  Settimana: {_fmt_hours(metrics.logged_week_seconds)}"
-            f" / {HOURS_PER_DAY * DAYS_PER_WEEK}h",
-            f"  {week_bar}",
-        ]
+        if start:
+            delta = start - now
+            total_min = max(int(delta.total_seconds()) // 60, 0)
+            hours, mins = divmod(total_min, 60)
+            countdown = f"tra {hours}h {mins}m" if hours else f"tra {mins}m"
+            time_str = start.strftime("%H:%M")
+            lines.append(f"  {event.summary}")
+            lines.append(f"  {time_str} ({countdown})")
+        else:
+            lines.append(f"  {event.summary}")
 
-        if metrics.estimated_week_seconds > 0:
-            lines.append("")
-            lines.append(f"  Stimato: {_fmt_hours(metrics.estimated_week_seconds)}")
+        link = event.meet_link or event.html_link
+        if link:
+            lines.append(f"  {link}")
 
         widget.update("\n".join(lines))
 
-    def _render_weekly_chart(self, metrics: DashboardMetrics) -> None:
-        widget = self.query_one("#dash-weekly-chart", Static)
-        lines = ["📅 Carico Settimanale", ""]
-        lines.append(_weekly_heatmap(metrics))
+    def _render_today_agenda(self, metrics: DashboardMetrics) -> None:
+        widget = self.query_one("#dash-today-agenda", Static)
+        lines = ["📅 Agenda di Oggi", ""]
+        if not metrics.today_events:
+            lines.append("  Nessun evento")
+        else:
+            for event in metrics.today_events:
+                start = _parse_event_time(event.start)
+                time_str = start.strftime("%H:%M") if start else "     "
+                icon = "📹" if _is_meeting(event) else "📌"
+                summary = event.summary[:45]
+                lines.append(f"  {time_str} {icon} {summary}")
         widget.update("\n".join(lines))
+
+    def _render_recent_tasks(self, metrics: DashboardMetrics) -> None:
+        widget = self.query_one("#dash-recent-tasks", Static)
+        lines = ["🎫 Task Recenti", ""]
+        if not metrics.recent_tasks:
+            lines.append("  Nessun task")
+        else:
+            for issue in metrics.recent_tasks:
+                icon = STATUS_ICONS.get(issue.status_category, "📋")
+                summary = issue.summary[:38]
+                lines.append(f"  {icon} {issue.key}: {summary}")
+        widget.update("\n".join(lines))
+
+    def _render_recent_emails(self, metrics: DashboardMetrics) -> None:
+        widget = self.query_one("#dash-recent-emails", Static)
+        lines = ["📧 Email Recenti", ""]
+        if not metrics.recent_emails:
+            lines.append("  Nessuna email non letta")
+        else:
+            for msg in metrics.recent_emails:
+                sender = msg.header.from_address.split("<")[0].strip()
+                sender = sender[:20]
+                subject = msg.header.subject[:35]
+                dot = "●" if msg.is_unread else "○"
+                lines.append(f"  {dot} {sender} — {subject}")
+        widget.update("\n".join(lines))
+
+    def _render_recent_files(self, metrics: DashboardMetrics) -> None:
+        widget = self.query_one("#dash-recent-files", Static)
+        lines = ["📁 File Recenti", ""]
+        if not metrics.recent_files:
+            lines.append("  Nessun file recente")
+        else:
+            for f in metrics.recent_files:
+                lines.append(f"  {f.icon} {f.name[:45]}")
+        widget.update("\n".join(lines))
+
+    # ── Right panel ─────────────────────────────────────
 
     def _render_tasks(self, metrics: DashboardMetrics) -> None:
         widget = self.query_one("#dash-tasks", Static)
