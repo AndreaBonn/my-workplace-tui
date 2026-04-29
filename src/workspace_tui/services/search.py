@@ -3,8 +3,12 @@ from __future__ import annotations
 import enum
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class SearchSource(enum.Enum):
@@ -80,7 +84,7 @@ class SearchService:
         if len(query.strip()) < 2:
             return SearchResponse(query=query, results=[], errors={})
 
-        providers: dict[SearchSource, callable] = {}
+        providers: dict[SearchSource, Callable[[], list[SearchResult]]] = {}
         if self._gmail:
             providers[SearchSource.GMAIL] = lambda: self._search_gmail(query)
         if self._jira:
