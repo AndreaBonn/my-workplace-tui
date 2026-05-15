@@ -289,24 +289,45 @@ Tutti gli intervalli di polling hanno un minimo di 10 secondi. Valori inferiori 
 
 ## Architettura
 
-```
-WorkspaceTUI (Textual App)
-+-- Tabs (livello UI)
-|   +-- Gmail, Chat, Calendar, Drive, Jira, Search, Dashboard
-|   +-- Widget (lista email, dettaglio issue, modale composizione, ...)
-+-- Services (logica di business)
-|   +-- Gmail, Chat, Calendar, Drive, Jira, Search, Dashboard
-|   +-- BaseService (retry con backoff esponenziale, categorizzazione errori)
-+-- Auth
-|   +-- Google OAuth2 (Desktop flow, auto-refresh token)
-|   +-- Jira Basic Auth (API token, sessioni per-account)
-+-- Cache (diskcache, TTL per servizio)
-+-- Notifiche (plyer, notifiche desktop a livello OS)
-+-- Polling (PollManager, state-diffing, first-poll-silent)
-+-- Config (pydantic-settings, .env)
+```mermaid
+%%{init: {'theme': 'default'}}%%
+graph LR
+    classDef core fill:#2563eb,stroke:#1d4ed8,color:#fff
+    classDef data fill:#d97706,stroke:#b45309,color:#fff
+    classDef ext fill:#6b7280,stroke:#4b5563,color:#fff
+    classDef engine fill:#059669,stroke:#047857,color:#fff
+
+    user(["Terminale utente"]):::ext
+
+    subgraph app["WorkspaceTUI"]
+        ui["Tab UI"]:::core
+        svc["Servizi"]:::core
+        base["BaseService"]:::core
+        poll["PollManager"]:::engine
+        cache["Cache"]:::data
+        auth["Auth"]:::engine
+        config["Config"]:::data
+    end
+
+    subgraph apis["API Esterne"]
+        google["Google APIs"]:::ext
+        jira_api["Jira REST API"]:::ext
+    end
+
+    user --> ui
+    ui --> svc
+    svc --> base
+    base --> cache
+    base --> apis
+    auth --> google
+    auth --> jira_api
+    poll --> svc
+    poll -->|"notifica"| user
+    config --> auth
+    config --> svc
 ```
 
-I servizi non importano mai componenti UI. Le tab ricevono i servizi tramite il modello di composizione di Textual.
+I servizi non importano mai componenti UI. Le tab ricevono i servizi tramite il modello di composizione di Textual. Per diagrammi tecnici dettagliati (sequenza inizializzazione, flusso polling, state machine retry, routing Jira multi-account), vedi [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Test
 

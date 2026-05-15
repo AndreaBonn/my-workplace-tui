@@ -287,24 +287,45 @@ All polling intervals have a minimum of 10 seconds. Values below 10 are clamped 
 
 ## Architecture
 
-```
-WorkspaceTUI (Textual App)
-├── Tabs (UI layer)
-│   ├── Gmail, Chat, Calendar, Drive, Jira, Search, Dashboard
-│   └── Widgets (email list, issue detail, compose modal, ...)
-├── Services (business logic)
-│   ├── Gmail, Chat, Calendar, Drive, Jira, Search, Dashboard
-│   └── BaseService (retry with exponential backoff, error categorization)
-├── Auth
-│   ├── Google OAuth2 (Desktop flow, token auto-refresh)
-│   └── Jira Basic Auth (API token, per-account sessions)
-├── Cache (diskcache, per-service TTL)
-├── Notifications (plyer, OS-level desktop notifications)
-├── Polling (PollManager, state-diffing, first-poll-silent)
-└── Config (pydantic-settings, .env)
+```mermaid
+%%{init: {'theme': 'default'}}%%
+graph LR
+    classDef core fill:#2563eb,stroke:#1d4ed8,color:#fff
+    classDef data fill:#d97706,stroke:#b45309,color:#fff
+    classDef ext fill:#6b7280,stroke:#4b5563,color:#fff
+    classDef engine fill:#059669,stroke:#047857,color:#fff
+
+    user(["User Terminal"]):::ext
+
+    subgraph app["WorkspaceTUI"]
+        ui["UI Tabs"]:::core
+        svc["Services"]:::core
+        base["BaseService"]:::core
+        poll["PollManager"]:::engine
+        cache["Cache"]:::data
+        auth["Auth"]:::engine
+        config["Config"]:::data
+    end
+
+    subgraph apis["External APIs"]
+        google["Google APIs"]:::ext
+        jira_api["Jira REST API"]:::ext
+    end
+
+    user --> ui
+    ui --> svc
+    svc --> base
+    base --> cache
+    base --> apis
+    auth --> google
+    auth --> jira_api
+    poll --> svc
+    poll -->|"notify"| user
+    config --> auth
+    config --> svc
 ```
 
-Services never import UI components. Tabs receive services via Textual's composition model.
+Services never import UI components. Tabs receive services via Textual's composition model. For detailed technical diagrams (initialization sequence, polling flow, retry state machine, Jira multi-account routing), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Testing
 
